@@ -3,6 +3,8 @@ import { useApi } from "../hooks/useApi";
 import { useProjectStore } from "../stores/projectStore";
 import { supabase } from "../lib/supabase";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+
 export default function Projects() {
   const { data: projects, loading, refetch } = useApi("/api/projects");
   const [showNew, setShowNew] = useState(false);
@@ -16,7 +18,7 @@ export default function Projects() {
     setCreating(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch("/api/projects", {
+      const res = await fetch(`${API_URL}/api/projects`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -41,7 +43,7 @@ export default function Projects() {
   const createKey = async (projectId) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`/api/projects/${projectId}/keys`, {
+      const res = await fetch(`${API_URL}/api/projects/${projectId}/keys`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -62,7 +64,7 @@ export default function Projects() {
   const revokeKey = async (projectId, keyId) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      await fetch(`/api/projects/${projectId}/keys/${keyId}/revoke`, {
+      await fetch(`${API_URL}/api/projects/${projectId}/keys/${keyId}/revoke`, {
         method: "PATCH",
         headers: { Authorization: `Bearer ${session.access_token}` },
       });

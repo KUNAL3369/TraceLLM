@@ -9,6 +9,8 @@ import { supabase } from "../lib/supabase";
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"];
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+
 function StatusDot({ status }) {
   const colors = { healthy: "bg-green-400", degraded: "bg-amber-400", down: "bg-red-400", unknown: "bg-gray-500" };
   return <span className={`inline-block h-2 w-2 rounded-full ${colors[status] || colors.unknown}`} />;
@@ -35,7 +37,7 @@ export default function Dashboard() {
         const params = new URLSearchParams();
         if (selectedProjectId) params.set("project_id", selectedProjectId);
 
-        const res = await fetch(`/api/metrics?${params}`, {
+        const res = await fetch(`${API_URL}/api/metrics?${params}`, {
           headers: session ? { Authorization: `Bearer ${session.access_token}` } : {},
         });
         if (res.ok) {
@@ -51,9 +53,9 @@ export default function Dashboard() {
 
     fetchMetrics();
 
-    fetch("/api/provider-health").then((r) => r.ok && r.json()).then(setProviderHealth).catch(() => {});
+    fetch(`${API_URL}/api/provider-health`).then((r) => r.ok && r.json()).then(setProviderHealth).catch(() => {});
     if (selectedProjectId) {
-      fetch(`/api/alerts/events?project_id=${selectedProjectId}`)
+      fetch(`${API_URL}/api/alerts/events?project_id=${selectedProjectId}`)
         .then((r) => r.ok && r.json())
         .then((events) => setAlerts(events?.filter((e) => e.status === "triggered") || []))
         .catch(() => {});

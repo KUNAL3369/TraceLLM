@@ -3,6 +3,8 @@ import { useApi } from "../hooks/useApi";
 import { useProjectStore } from "../stores/projectStore";
 import { supabase } from "../lib/supabase";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+
 const ALERT_TYPES = [
   { id: "latency_spike", label: "Latency Spike", desc: "Average latency exceeds threshold" },
   { id: "error_rate_spike", label: "Error Rate Spike", desc: "Error rate exceeds threshold (%)" },
@@ -23,7 +25,7 @@ export default function Alerts() {
     if (!form.name || !form.threshold_value || !selectedProjectId) return;
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      await fetch("/api/alerts", {
+      await fetch(`${API_URL}/api/alerts`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({ ...form, threshold_value: Number(form.threshold_value), project_id: selectedProjectId }),
@@ -39,7 +41,7 @@ export default function Alerts() {
   const deleteAlert = async (id) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      await fetch(`/api/alerts/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${session.access_token}` } });
+      await fetch(`${API_URL}/api/alerts/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${session.access_token}` } });
       refetch();
     } catch (err) {
       console.error("Delete alert error:", err);
@@ -49,7 +51,7 @@ export default function Alerts() {
   const toggleAlert = async (alert) => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      await fetch(`/api/alerts/${alert.id}`, {
+      await fetch(`${API_URL}/api/alerts/${alert.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({ is_active: !alert.is_active }),

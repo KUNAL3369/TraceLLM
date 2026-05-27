@@ -1,7 +1,7 @@
 import { supabase } from "./supabase";
 import { useProjectStore } from "../stores/projectStore";
 
-const API_BASE = import.meta.env.VITE_API_URL || "";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 let sessionCounter = Date.now();
 

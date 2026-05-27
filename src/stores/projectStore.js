@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { supabase } from "../lib/supabase";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+
 export const useProjectStore = create((set, get) => ({
   projects: [],
   selectedProjectId: null,
@@ -19,7 +21,7 @@ export const useProjectStore = create((set, get) => ({
       return;
     }
 
-    const res = await fetch("/api/projects", {
+    const res = await fetch(`${API_URL}/api/projects`, {
       headers: { Authorization: `Bearer ${session.access_token}` },
     });
     if (res.ok) {

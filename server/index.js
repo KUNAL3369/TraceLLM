@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import process from "node:process";
 import "dotenv/config";
 import rateLimit from "express-rate-limit";
 import cron from "node-cron";
@@ -90,6 +91,7 @@ app.get("/api/provider-health", async (_req, res) => {
   res.json(health);
 });
 
+// eslint-disable-next-line no-unused-vars
 app.use((err, _req, res, _next) => {
   console.error("Unhandled error:", err);
   res.status(500).json({ error: "Internal server error" });

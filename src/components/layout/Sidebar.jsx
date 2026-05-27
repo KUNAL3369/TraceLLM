@@ -19,7 +19,7 @@ export default function Sidebar() {
   const { projects, selectedProjectId, setSelectedProject, loading } = useProjectStore();
 
   return (
-    <aside className="flex h-screen w-60 flex-col border-r border-white/10 bg-[#0f172a]">
+    <aside className="fixed left-0 top-0 flex h-screen w-60 flex-col border-r border-white/10 bg-[#0f172a]">
       <div className="flex items-center gap-2 border-b border-white/10 px-5 py-4">
         <span className="text-xl">🔭</span>
         <span className="text-lg font-bold text-white">TraceLLM</span>
@@ -45,7 +45,7 @@ export default function Sidebar() {
         </select>
       </div>
 
-      <nav className="flex-1 space-y-1 p-3">
+      <nav className="flex-1 overflow-y-auto p-3">
         {navItems.map((item) => (
           <NavLink
             key={item.to}

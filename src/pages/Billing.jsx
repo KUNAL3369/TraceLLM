@@ -2,6 +2,8 @@ import { useApi } from "../hooks/useApi";
 import { supabase } from "../lib/supabase";
 import { useState } from "react";
 
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+
 const PLANS = {
   free: { name: "Free", requests: "1,000", color: "bg-gray-900/30 text-gray-400", features: ["1,000 requests/mo", "Basic metrics", "Email alerts"] },
   pro: { name: "Pro", requests: "10,000", color: "bg-blue-900/30 text-blue-400", features: ["10,000 requests/mo", "Advanced analytics", "Slack + Email alerts", "PII redaction"] },
@@ -21,7 +23,7 @@ export default function Billing() {
     setUpgrading(plan);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      await fetch("/api/billing/upgrade", {
+      await fetch(`${API_URL}/api/billing/upgrade`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({ plan }),
