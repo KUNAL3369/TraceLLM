@@ -1,7 +1,8 @@
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import process from "node:process";
-import "dotenv/config";
+import helmet from "helmet";
+import morgan from "morgan";
 import rateLimit from "express-rate-limit";
 import cron from "node-cron";
 
@@ -16,12 +17,29 @@ import auditRouter from "./routes/audit.js";
 import notificationsRouter from "./routes/notifications.js";
 import { userAuth, apiKeyAuth } from "./middleware/apiKeyAuth.js";
 import { evaluateAllAlerts } from "./services/alertEvaluator.js";
+import { startIngestWorker } from "./services/queueService.js";
+import { supabase } from "./db/supabase.js";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const FRONTEND_URL = process.env.VITE_FRONTEND_URL || process.env.APP_URL || "http://localhost:5173";
 
-app.use(cors());
+const REQUIRED_ENV = [
+  "VITE_SUPABASE_URL",
+  "SUPABASE_SERVICE_ROLE_KEY",
+];
+
+for (const key of REQUIRED_ENV) {
+  if (!process.env[key]) {
+    console.error(`Missing required env var: ${key}`);
+    process.exit(1);
+  }
+}
+
+app.use(helmet());
+app.use(cors({ origin: FRONTEND_URL, credentials: true }));
 app.use(express.json({ limit: "1mb" }));
+app.use(morgan("short"));
 
 const generalLimiter = rateLimit({
   windowMs: 60000,
@@ -36,7 +54,11 @@ const ingestLimiter = rateLimit({
 });
 
 app.use("/api", generalLimiter);
-app.use("/api/ingest", ingestLimiter);
+app.set("trust proxy", 1);
+
+app.get("/api/health", (_req, res) => {
+  res.json({ status: "ok", service: "TraceLLM API", version: "2.0.0" });
+});
 
 app.use("/api/projects", userAuth, projectsRouter);
 app.use("/api/conversations", userAuth, conversationsRouter);
@@ -44,18 +66,30 @@ app.use("/api/alerts", userAuth, alertsRouter);
 app.use("/api/billing", userAuth, billingRouter);
 app.use("/api/audit", userAuth, auditRouter);
 app.use("/api/notifications", userAuth, notificationsRouter);
-app.use("/api/metrics", metricsRouter);
-app.use("/api/ingest", apiKeyAuth, ingestRouter);
-app.use("/api/chat", chatRouter);
+app.use("/api/metrics", userAuth, metricsRouter);
+app.use("/api/chat", userAuth, chatRouter);
+app.use("/api/provider-health", userAuth, providerHealthHandler);
+app.use("/api/ingest", ingestLimiter, apiKeyAuth, ingestRouter);
 
-app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok", service: "TraceLLM API", version: "2.0.0" });
+app.use((err, _req, res, _next) => {
+  console.error("Unhandled error:", err);
+  res.status(500).json({ error: "Internal server error" });
 });
 
-app.get("/api/provider-health", async (_req, res) => {
+cron.schedule("*/2 * * * *", () => {
+  evaluateAllAlerts().catch((err) => console.error("[Cron] Alert evaluation failed:", err));
+});
+
+app.listen(PORT, () => {
+  console.log(`TraceLLM API running on http://localhost:${PORT}`);
+  console.log(`CORS origin: ${FRONTEND_URL}`);
+});
+
+startIngestWorker();
+
+async function providerHealthHandler(_req, res) {
   const now = new Date();
   const fiveMinAgo = new Date(now - 5 * 60000).toISOString();
-
   const providers = ["openai", "anthropic", "groq"];
   const health = [];
 
@@ -89,24 +123,4 @@ app.get("/api/provider-health", async (_req, res) => {
   }
 
   res.json(health);
-});
-
-// eslint-disable-next-line no-unused-vars
-app.use((err, _req, res, _next) => {
-  console.error("Unhandled error:", err);
-  res.status(500).json({ error: "Internal server error" });
-});
-
-cron.schedule("*/2 * * * *", () => {
-  console.log("[Cron] Evaluating alerts...");
-  evaluateAllAlerts().catch((err) => console.error("[Cron] Alert evaluation failed:", err));
-});
-
-app.listen(PORT, () => {
-  console.log(`TraceLLM API running on http://localhost:${PORT}`);
-});
-
-import { startIngestWorker } from "./services/queueService.js";
-import { supabase } from "./db/supabase.js";
-
-startIngestWorker();
+}
