@@ -1,10 +1,10 @@
 # Environment files — DO NOT COMMIT REAL SECRETS
 .env
 .env.local
-.env.example
 .env.production
 .env.development
-.env.*
+# Keep template file
+!.env.example
 
 # Logs
 logs
