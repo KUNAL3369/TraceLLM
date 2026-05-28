@@ -1,5 +1,6 @@
 import { supabase } from "../db/supabase.js";
 import { estimateTotalCost } from "./costService.js";
+import { logger } from "./logger.js";
 
 export async function getMetrics({ projectId, startDate, endDate }) {
   let query = supabase.from("inference_logs").select("*");
@@ -11,7 +12,7 @@ export async function getMetrics({ projectId, startDate, endDate }) {
   const { data, error } = await query;
 
   if (error) {
-    console.error("Metrics query error:", error);
+    logger.error({ err: error }, "Metrics query error");
     return null;
   }
 
@@ -23,23 +24,38 @@ export async function getMetrics({ projectId, startDate, endDate }) {
   const latencies = data.map((r) => r.latency_ms).sort((a, b) => a - b);
   const sumLatency = latencies.reduce((a, b) => a + b, 0);
   const p95Index = Math.ceil(latencies.length * 0.95) - 1;
-  const sessions = new Set(data.filter((r) => r.session_id).map((r) => r.session_id));
+  const sessions = new Set(
+    data.filter((r) => r.session_id).map((r) => r.session_id),
+  );
 
-  const totalPromptTokens = data.reduce((s, r) => s + (r.prompt_tokens || 0), 0);
-  const totalCompletionTokens = data.reduce((s, r) => s + (r.completion_tokens || 0), 0);
+  const totalPromptTokens = data.reduce(
+    (s, r) => s + (r.prompt_tokens || 0),
+    0,
+  );
+  const totalCompletionTokens = data.reduce(
+    (s, r) => s + (r.completion_tokens || 0),
+    0,
+  );
   const totalTokens = data.reduce((s, r) => s + (r.total_tokens || 0), 0);
 
   const bucketSize = Math.max(1, Math.floor(data.length / 24));
   const trends = [];
-  const sorted = [...data].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  const sorted = [...data].sort(
+    (a, b) => new Date(a.created_at) - new Date(b.created_at),
+  );
 
   for (let i = 0; i < sorted.length; i += bucketSize) {
     const bucket = sorted.slice(i, i + bucketSize);
     const bucketLatencies = bucket.map((r) => r.latency_ms);
     trends.push({
-      time: new Date(bucket[0].created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+      time: new Date(bucket[0].created_at).toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
       requests: bucket.length,
-      latency: Math.round(bucketLatencies.reduce((a, b) => a + b, 0) / bucketLatencies.length),
+      latency: Math.round(
+        bucketLatencies.reduce((a, b) => a + b, 0) / bucketLatencies.length,
+      ),
       tokens: bucket.reduce((s, r) => s + (r.total_tokens || 0), 0),
       errors: bucket.filter((r) => r.status === "error").length,
     });
@@ -64,22 +80,35 @@ export async function getMetrics({ projectId, startDate, endDate }) {
     .sort((a, b) => b.count - a.count);
 
   const errorByType = {};
-  data.filter((r) => r.status === "error" && r.error_type).forEach((r) => {
-    errorByType[r.error_type] = (errorByType[r.error_type] || 0) + 1;
-  });
-  const errorBreakdown = Object.entries(errorByType).map(([name, value]) => ({ name, value }));
+  data
+    .filter((r) => r.status === "error" && r.error_type)
+    .forEach((r) => {
+      errorByType[r.error_type] = (errorByType[r.error_type] || 0) + 1;
+    });
+  const errorBreakdown = Object.entries(errorByType).map(([name, value]) => ({
+    name,
+    value,
+  }));
 
   const errorByProvider = {};
-  data.filter((r) => r.status === "error").forEach((r) => {
-    if (!errorByProvider[r.provider]) {
-      errorByProvider[r.provider] = { provider: r.provider, timeout: 0, rate_limit: 0, invalid: 0, total: 0 };
-    }
-    const type = r.error_type || "unknown";
-    if (type.includes("timeout")) errorByProvider[r.provider].timeout++;
-    else if (type.includes("rate")) errorByProvider[r.provider].rate_limit++;
-    else errorByProvider[r.provider].invalid++;
-    errorByProvider[r.provider].total++;
-  });
+  data
+    .filter((r) => r.status === "error")
+    .forEach((r) => {
+      if (!errorByProvider[r.provider]) {
+        errorByProvider[r.provider] = {
+          provider: r.provider,
+          timeout: 0,
+          rate_limit: 0,
+          invalid: 0,
+          total: 0,
+        };
+      }
+      const type = r.error_type || "unknown";
+      if (type.includes("timeout")) errorByProvider[r.provider].timeout++;
+      else if (type.includes("rate")) errorByProvider[r.provider].rate_limit++;
+      else errorByProvider[r.provider].invalid++;
+      errorByProvider[r.provider].total++;
+    });
 
   return {
     summary: {
@@ -92,7 +121,8 @@ export async function getMetrics({ projectId, startDate, endDate }) {
       total_completion_tokens: totalCompletionTokens,
       total_tokens: totalTokens,
       active_sessions: sessions.size,
-      requests_per_minute: total > 0 ? Math.round(total / (bucketSize || 1)) : 0,
+      requests_per_minute:
+        total > 0 ? Math.round(total / (bucketSize || 1)) : 0,
     },
     trends,
     providers,

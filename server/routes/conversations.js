@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { supabase } from "../db/supabase.js";
+import { logger } from "../services/logger.js";
 
 const router = Router();
 
@@ -7,7 +8,9 @@ router.get("/", async (req, res) => {
   try {
     let query = supabase
       .from("conversations")
-      .select("*, messages(count), inference_logs(provider, model, total_tokens)")
+      .select(
+        "*, messages(count), inference_logs(provider, model, total_tokens)",
+      )
       .order("last_activity_at", { ascending: false });
 
     if (req.query.project_id) {
@@ -21,7 +24,7 @@ router.get("/", async (req, res) => {
     if (error) return res.status(500).json({ error: error.message });
     return res.json(data);
   } catch (err) {
-    console.error("Conversations error:", err);
+    logger.error({ err }, "Conversations error");
     return res.status(500).json({ error: "Failed to fetch conversations" });
   }
 });
@@ -31,14 +34,19 @@ router.post("/", async (req, res) => {
     const { project_id, session_id, title } = req.body;
     const { data, error } = await supabase
       .from("conversations")
-      .insert({ project_id, session_id, user_identifier: title || null, status: "active" })
+      .insert({
+        project_id,
+        session_id,
+        user_identifier: title || null,
+        status: "active",
+      })
       .select()
       .single();
 
     if (error) return res.status(500).json({ error: error.message });
     return res.status(201).json(data);
   } catch (err) {
-    console.error("Create conversation error:", err);
+    logger.error({ err }, "Create conversation error");
     return res.status(500).json({ error: "Failed to create conversation" });
   }
 });
@@ -54,7 +62,7 @@ router.get("/:id", async (req, res) => {
     if (error) return res.status(404).json({ error: "Conversation not found" });
     return res.json(conv);
   } catch (err) {
-    console.error("Conversation detail error:", err);
+    logger.error({ err }, "Conversation detail error");
     return res.status(500).json({ error: "Failed to fetch conversation" });
   }
 });
@@ -86,7 +94,7 @@ router.post("/:id/messages", async (req, res) => {
 
     return res.status(201).json(data);
   } catch (err) {
-    console.error("Create message error:", err);
+    logger.error({ err }, "Create message error");
     return res.status(500).json({ error: "Failed to save message" });
   }
 });

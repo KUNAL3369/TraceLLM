@@ -8,12 +8,17 @@ const isProd = process.env.NODE_ENV === "production";
 
 if (process.env.OTEL_ENABLED || isProd) {
   const { NodeSDK } = await import("@opentelemetry/sdk-node");
-  const { getNodeAutoInstrumentations } = await import("@opentelemetry/instrumentation-http");
-  const { ExpressInstrumentation } = await import("@opentelemetry/instrumentation-express");
-  const { IORedisInstrumentation } = await import("@opentelemetry/instrumentation-ioredis");
+  const { getNodeAutoInstrumentations } =
+    await import("@opentelemetry/instrumentation-http");
+  const { ExpressInstrumentation } =
+    await import("@opentelemetry/instrumentation-express");
+  const { IORedisInstrumentation } =
+    await import("@opentelemetry/instrumentation-ioredis");
   const { Resource } = await import("@opentelemetry/resources");
-  const { SemanticResourceAttributes } = await import("@opentelemetry/semantic-conventions");
-  const { ConsoleSpanExporter, SimpleSpanProcessor } = await import("@opentelemetry/sdk-trace-base");
+  const { SemanticResourceAttributes } =
+    await import("@opentelemetry/semantic-conventions");
+  const { ConsoleSpanExporter, SimpleSpanProcessor } =
+    await import("@opentelemetry/sdk-trace-base");
 
   const sdk = new NodeSDK({
     resource: new Resource({
@@ -29,5 +34,5 @@ if (process.env.OTEL_ENABLED || isProd) {
   });
 
   sdk.start();
-  console.log("[Telemetry] OpenTelemetry started");
+  process.stderr.write("[Telemetry] OpenTelemetry started\n");
 }

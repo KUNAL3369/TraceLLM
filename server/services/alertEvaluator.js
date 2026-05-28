@@ -3,9 +3,14 @@ import { getMetrics } from "./metricsService.js";
 import { sendEmail, buildAlertEmail } from "./emailService.js";
 import { sendSlackAlert } from "./slackService.js";
 import { sendWebhookAlert } from "./webhookService.js";
+import { logger } from "./logger.js";
 
 async function getProjectName(projectId) {
-  const { data } = await supabase.from("projects").select("name").eq("id", projectId).single();
+  const { data } = await supabase
+    .from("projects")
+    .select("name")
+    .eq("id", projectId)
+    .single();
   return data?.name || projectId;
 }
 
@@ -48,12 +53,22 @@ const EVALUATORS = {
   },
   provider_outage: async (alert, metrics) => {
     const errors = metrics?.errors_by_provider || [];
-    const provider = alert.name?.toLowerCase().includes("openai") ? "openai" :
-                     alert.name?.toLowerCase().includes("claude") || alert.name?.toLowerCase().includes("anthropic") ? "anthropic" :
-                     alert.name?.toLowerCase().includes("groq") ? "groq" : null;
+    const provider = alert.name?.toLowerCase().includes("openai")
+      ? "openai"
+      : alert.name?.toLowerCase().includes("claude") ||
+          alert.name?.toLowerCase().includes("anthropic")
+        ? "anthropic"
+        : alert.name?.toLowerCase().includes("groq")
+          ? "groq"
+          : null;
     if (!provider) return { triggered: false, value: 0 };
-    const providerErrors = errors.find((e) => e.provider?.toLowerCase() === provider);
-    return { triggered: (providerErrors?.total || 0) > alert.threshold_value, value: providerErrors?.total || 0 };
+    const providerErrors = errors.find(
+      (e) => e.provider?.toLowerCase() === provider,
+    );
+    return {
+      triggered: (providerErrors?.total || 0) > alert.threshold_value,
+      value: providerErrors?.total || 0,
+    };
   },
   throughput_drop: async (alert, metrics) => {
     const rps = metrics?.summary?.requests_per_minute || 0;
@@ -65,7 +80,9 @@ export async function evaluateAlert(alert) {
   try {
     const metrics = await getMetrics({
       projectId: alert.project_id,
-      startDate: new Date(Date.now() - alert.time_window_minutes * 60000).toISOString(),
+      startDate: new Date(
+        Date.now() - alert.time_window_minutes * 60000,
+      ).toISOString(),
     });
 
     if (!metrics) return;
@@ -95,10 +112,19 @@ export async function evaluateAlert(alert) {
       timestamp: new Date().toISOString(),
     };
 
-    if (alert.notification_channel === "email" || alert.notification_channel === "all") {
+    if (
+      alert.notification_channel === "email" ||
+      alert.notification_channel === "all"
+    ) {
       if (settings?.email_enabled !== false) {
         const owners = await getOrganizationOwners(
-          (await supabase.from("projects").select("organization_id").eq("id", alert.project_id).single()).data?.organization_id
+          (
+            await supabase
+              .from("projects")
+              .select("organization_id")
+              .eq("id", alert.project_id)
+              .single()
+          ).data?.organization_id,
         );
         for (const email of owners) {
           if (email) {
@@ -109,19 +135,25 @@ export async function evaluateAlert(alert) {
       }
     }
 
-    if (alert.notification_channel === "slack" || alert.notification_channel === "all") {
+    if (
+      alert.notification_channel === "slack" ||
+      alert.notification_channel === "all"
+    ) {
       if (settings?.slack_webhook_url) {
         await sendSlackAlert(settings.slack_webhook_url, alertInfo);
       }
     }
 
-    if (alert.notification_channel === "webhook" || alert.notification_channel === "all") {
+    if (
+      alert.notification_channel === "webhook" ||
+      alert.notification_channel === "all"
+    ) {
       if (settings?.webhook_url) {
         await sendWebhookAlert(settings.webhook_url, alertInfo);
       }
     }
   } catch (err) {
-    console.error("Alert evaluation error:", alert.id, err.message);
+    logger.error({ err, alertId: alert.id }, "Alert evaluation error");
   }
 }
 
@@ -132,7 +164,7 @@ export async function evaluateAllAlerts() {
     .eq("is_active", true);
 
   if (error) {
-    console.error("Failed to fetch alerts:", error);
+    logger.error({ err: error }, "Failed to fetch alerts");
     return;
   }
 

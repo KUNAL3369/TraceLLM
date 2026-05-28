@@ -6,12 +6,14 @@ try {
     resendClient = new Resend(process.env.RESEND_API_KEY);
   }
 } catch (err) {
-  console.warn("Resend not configured:", err.message);
+  process.stderr.write(`Resend not configured: ${err.message}\n`);
 }
 
 export async function sendEmail({ to, subject, html }) {
   if (!resendClient) {
-    console.warn("Resend not configured — email not sent:", subject);
+    process.stderr.write(
+      `Resend not configured — email not sent: ${subject}\n`,
+    );
     return { success: false, reason: "Resend not configured" };
   }
 
@@ -25,12 +27,19 @@ export async function sendEmail({ to, subject, html }) {
     if (error) throw error;
     return { success: true, id: data?.id };
   } catch (err) {
-    console.error("Email send error:", err);
+    process.stderr.write(`Email send error: ${err}\n`);
     return { success: false, error: err.message };
   }
 }
 
-export function buildAlertEmail({ projectName, alertName, alertType, triggeredValue, threshold, timestamp }) {
+export function buildAlertEmail({
+  projectName,
+  alertName,
+  alertType,
+  triggeredValue,
+  threshold,
+  timestamp,
+}) {
   return {
     subject: `[TraceLLM Alert] ${alertName} — ${projectName}`,
     html: `

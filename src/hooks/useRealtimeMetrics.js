@@ -45,7 +45,7 @@ export function useRealtimeMetrics(projectId) {
               break;
           }
         } catch {
-          // ignore parse errors
+          console.warn("[SSE] Failed to parse metrics event");
         }
       };
 

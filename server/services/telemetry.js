@@ -4,7 +4,10 @@ import { ExpressInstrumentation } from "@opentelemetry/instrumentation-express";
 import { IORedisInstrumentation } from "@opentelemetry/instrumentation-ioredis";
 import { Resource } from "@opentelemetry/resources";
 import { SemanticResourceAttributes } from "@opentelemetry/semantic-conventions";
-import { ConsoleSpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
+import {
+  ConsoleSpanExporter,
+  SimpleSpanProcessor,
+} from "@opentelemetry/sdk-trace-base";
 
 const isProd = process.env.NODE_ENV === "production";
 
@@ -21,15 +24,17 @@ export function startTelemetry() {
       new ExpressInstrumentation(),
       new IORedisInstrumentation(),
     ],
-    spanProcessors: [
-      new SimpleSpanProcessor(new ConsoleSpanExporter()),
-    ],
+    spanProcessors: [new SimpleSpanProcessor(new ConsoleSpanExporter())],
   });
 
   sdk.start();
-  console.log("[Telemetry] OpenTelemetry started");
+  process.stderr.write("[Telemetry] OpenTelemetry started\n");
 
   process.on("SIGTERM", () => {
-    sdk.shutdown().catch(console.error);
+    sdk
+      .shutdown()
+      .catch((err) =>
+        process.stderr.write(`Telemetry shutdown error: ${err}\n`),
+      );
   });
 }

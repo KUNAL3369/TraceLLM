@@ -4,13 +4,16 @@ const THEME_KEY = "tracellm-theme";
 
 function getSystemTheme() {
   if (typeof window === "undefined") return "dark";
-  return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  return window.matchMedia("(prefers-color-scheme: light)").matches
+    ? "light"
+    : "dark";
 }
 
 function getStoredTheme() {
   try {
     return localStorage.getItem(THEME_KEY);
   } catch {
+    console.warn("localStorage not available for theme");
     return null;
   }
 }
@@ -39,7 +42,7 @@ export function useTheme() {
       };
     }, []),
     () => currentTheme,
-    () => "dark"
+    () => "dark",
   );
 
   const setTheme = useCallback((newTheme) => {
@@ -47,7 +50,7 @@ export function useTheme() {
     try {
       localStorage.setItem(THEME_KEY, newTheme);
     } catch {
-      // localStorage unavailable
+      console.warn("localStorage not available for theme save");
     }
     document.documentElement.classList.toggle("dark", newTheme === "dark");
     document.documentElement.classList.toggle("light", newTheme === "light");

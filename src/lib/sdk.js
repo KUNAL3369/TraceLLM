@@ -10,7 +10,9 @@ export function createSession() {
 }
 
 async function getHeaders() {
-  const { data: { session } } = await supabase.auth.getSession();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
   return {
     "Content-Type": "application/json",
     ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
@@ -21,6 +23,7 @@ function getProjectId() {
   try {
     return useProjectStore.getState().selectedProjectId || "dev";
   } catch {
+    console.warn("[SDK] Failed to get project ID from store");
     return "dev";
   }
 }
@@ -82,7 +85,8 @@ export async function chatCompletion({
   signal,
 }) {
   const startTime = performance.now();
-  const requestPreview = messages[messages.length - 1]?.content?.slice(0, 200) || "";
+  const requestPreview =
+    messages[messages.length - 1]?.content?.slice(0, 200) || "";
   const headers = await getHeaders();
 
   try {
@@ -106,8 +110,20 @@ export async function chatCompletion({
       throw new Error(err.error || `HTTP ${res.status}`);
     }
 
-    if (onToken && res.headers.get("content-type")?.includes("text/event-stream")) {
-      return handleStream(res, onToken, provider, model, startTime, sessionId, conversationId, requestPreview);
+    if (
+      onToken &&
+      res.headers.get("content-type")?.includes("text/event-stream")
+    ) {
+      return handleStream(
+        res,
+        onToken,
+        provider,
+        model,
+        startTime,
+        sessionId,
+        conversationId,
+        requestPreview,
+      );
     }
 
     const data = await res.json();
@@ -115,13 +131,17 @@ export async function chatCompletion({
     const responsePreview = data.content?.slice(0, 200) || "";
 
     ingestLog({
-      provider, model, latency,
+      provider,
+      model,
+      latency,
       prompt_tokens: data.usage?.prompt_tokens || 0,
       completion_tokens: data.usage?.completion_tokens || 0,
       total_tokens: data.usage?.total_tokens || 0,
       status: "success",
-      requestPreview, responsePreview,
-      sessionId, conversationId,
+      requestPreview,
+      responsePreview,
+      sessionId,
+      conversationId,
     });
 
     return data;
@@ -129,18 +149,33 @@ export async function chatCompletion({
     if (err.name === "AbortError") throw err;
     const latency = Math.round(performance.now() - startTime);
     ingestLog({
-      provider, model, latency,
-      prompt_tokens: 0, completion_tokens: 0, total_tokens: 0,
+      provider,
+      model,
+      latency,
+      prompt_tokens: 0,
+      completion_tokens: 0,
+      total_tokens: 0,
       status: "error",
       error_type: err.message,
-      requestPreview, responsePreview: "",
-      sessionId, conversationId,
+      requestPreview,
+      responsePreview: "",
+      sessionId,
+      conversationId,
     });
     throw err;
   }
 }
 
-async function handleStream(res, onToken, provider, model, startTime, sessionId, conversationId, requestPreview) {
+async function handleStream(
+  res,
+  onToken,
+  provider,
+  model,
+  startTime,
+  sessionId,
+  conversationId,
+  requestPreview,
+) {
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let fullContent = "";
@@ -172,21 +207,45 @@ async function handleStream(res, onToken, provider, model, startTime, sessionId,
 
   const latency = Math.round(performance.now() - startTime);
   ingestLog({
-    provider, model, latency,
-    prompt_tokens: 0, completion_tokens: fullContent.length, total_tokens: 0,
+    provider,
+    model,
+    latency,
+    prompt_tokens: 0,
+    completion_tokens: fullContent.length,
+    total_tokens: 0,
     status: "success",
-    requestPreview, responsePreview: fullContent.slice(0, 200),
-    sessionId, conversationId,
+    requestPreview,
+    responsePreview: fullContent.slice(0, 200),
+    sessionId,
+    conversationId,
   });
 
   return { content: fullContent };
 }
 
-async function ingestLog({ provider, model, latency, prompt_tokens, completion_tokens, total_tokens, status, error_type, requestPreview, responsePreview, sessionId, conversationId }) {
+async function ingestLog({
+  provider,
+  model,
+  latency,
+  prompt_tokens,
+  completion_tokens,
+  total_tokens,
+  status,
+  error_type,
+  requestPreview,
+  responsePreview,
+  sessionId,
+  conversationId,
+}) {
   const payload = {
-    provider, model, latency_ms: latency,
-    prompt_tokens, completion_tokens, total_tokens,
-    status, error_type,
+    provider,
+    model,
+    latency_ms: latency,
+    prompt_tokens,
+    completion_tokens,
+    total_tokens,
+    status,
+    error_type,
     request_preview: requestPreview,
     response_preview: responsePreview,
     session_id: sessionId,

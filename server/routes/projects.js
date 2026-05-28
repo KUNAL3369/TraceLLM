@@ -2,12 +2,15 @@ import { Router } from "express";
 import { supabase } from "../db/supabase.js";
 import crypto from "crypto";
 import { z } from "zod";
+import { logger } from "../services/logger.js";
 
 const router = Router();
 
 const createProjectSchema = z.object({
   name: z.string().min(1).max(100),
-  environment: z.enum(["development", "staging", "production"]).default("development"),
+  environment: z
+    .enum(["development", "staging", "production"])
+    .default("development"),
 });
 
 function generateApiKey() {
@@ -17,7 +20,11 @@ function generateApiKey() {
 }
 
 function getUserOrgQuery(userId) {
-  return supabase.from("organizations").select("id").eq("owner_user_id", userId).single();
+  return supabase
+    .from("organizations")
+    .select("id")
+    .eq("owner_user_id", userId)
+    .single();
 }
 
 router.get("/", async (req, res) => {
@@ -27,7 +34,9 @@ router.get("/", async (req, res) => {
 
     const { data: projects, error } = await supabase
       .from("projects")
-      .select("*, api_keys(id, label, status, created_at, last_used_at, key_hash)")
+      .select(
+        "*, api_keys(id, label, status, created_at, last_used_at, key_hash)",
+      )
       .eq("organization_id", org.id)
       .order("created_at", { ascending: false });
 
@@ -43,7 +52,7 @@ router.get("/", async (req, res) => {
 
     return res.json(masked);
   } catch (err) {
-    console.error("Projects list error:", err);
+    logger.error({ err }, "Projects list error");
     return res.status(500).json({ error: "Failed to list projects" });
   }
 });
@@ -56,7 +65,11 @@ router.post("/", async (req, res) => {
 
     const { data: project, error } = await supabase
       .from("projects")
-      .insert({ organization_id: org.id, name: parsed.name, environment: parsed.environment })
+      .insert({
+        organization_id: org.id,
+        name: parsed.name,
+        environment: parsed.environment,
+      })
       .select()
       .single();
 
@@ -72,9 +85,11 @@ router.post("/", async (req, res) => {
     return res.status(201).json({ ...project, api_key: raw });
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return res.status(400).json({ error: "Validation failed", details: err.errors });
+      return res
+        .status(400)
+        .json({ error: "Validation failed", details: err.errors });
     }
-    console.error("Create project error:", err);
+    logger.error({ err }, "Create project error");
     return res.status(500).json({ error: "Failed to create project" });
   }
 });
@@ -101,7 +116,11 @@ router.post("/:id/keys", async (req, res) => {
     const { raw, hash } = generateApiKey();
     const { data: key, error } = await supabase
       .from("api_keys")
-      .insert({ project_id: project.id, key_hash: hash, label: req.body.label || "default" })
+      .insert({
+        project_id: project.id,
+        key_hash: hash,
+        label: req.body.label || "default",
+      })
       .select()
       .single();
 
@@ -109,7 +128,7 @@ router.post("/:id/keys", async (req, res) => {
 
     return res.status(201).json({ ...key, raw_key: raw });
   } catch (err) {
-    console.error("Create key error:", err);
+    logger.error({ err }, "Create key error");
     return res.status(500).json({ error: "Failed to create key" });
   }
 });
@@ -142,7 +161,7 @@ router.patch("/:projectId/keys/:keyId/revoke", async (req, res) => {
     if (error) return res.status(500).json({ error: error.message });
     return res.json({ success: true });
   } catch (err) {
-    console.error("Revoke key error:", err);
+    logger.error({ err }, "Revoke key error");
     return res.status(500).json({ error: "Failed to revoke key" });
   }
 });

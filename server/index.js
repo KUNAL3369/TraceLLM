@@ -1,4 +1,5 @@
 import "dotenv/config";
+import "./services/tracer.js";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -31,13 +32,18 @@ import { trackRequest } from "./routes/internal.js";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const FRONTEND_URL = process.env.VITE_FRONTEND_URL || process.env.APP_URL || "http://localhost:5173";
+const FRONTEND_URL =
+  process.env.VITE_FRONTEND_URL ||
+  process.env.APP_URL ||
+  (() => {
+    logger.warn(
+      "VITE_FRONTEND_URL and APP_URL not set — falling back to http://localhost:5173",
+    );
+    return "http://localhost:5173";
+  })();
 const isProduction = process.env.NODE_ENV === "production";
 
-const REQUIRED_ENV = [
-  "VITE_SUPABASE_URL",
-  "SUPABASE_SERVICE_ROLE_KEY",
-];
+const REQUIRED_ENV = ["VITE_SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"];
 
 for (const key of REQUIRED_ENV) {
   if (!process.env[key]) {
@@ -53,43 +59,56 @@ app.use(requestId);
 app.use(requestTiming);
 
 // Security headers
-app.use(helmet({
-  contentSecurityPolicy: {
-    useDefaults: false,
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", isProduction ? "" : "'unsafe-inline'", "'unsafe-eval'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: [
-        "'self'",
-        FRONTEND_URL,
-        process.env.VITE_SUPABASE_URL || "",
-        "https://api.openai.com",
-        "https://api.anthropic.com",
-        "https://api.groq.com",
-        "https://openrouter.ai",
-      ].filter(Boolean),
-      fontSrc: ["'self'"],
-      objectSrc: ["'none'"],
-      mediaSrc: ["'none'"],
-      frameSrc: ["'none'"],
-      formAction: ["'self'"],
-      baseUri: ["'self'"],
-      reportUri: isProduction ? "/api/csp-report" : null,
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: [
+          "'self'",
+          isProduction ? "" : "'unsafe-inline'",
+          "'unsafe-eval'",
+        ],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https:"],
+        connectSrc: [
+          "'self'",
+          FRONTEND_URL,
+          process.env.VITE_SUPABASE_URL || "",
+          "https://api.openai.com",
+          "https://api.anthropic.com",
+          "https://api.groq.com",
+          "https://openrouter.ai",
+        ].filter(Boolean),
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        mediaSrc: ["'none'"],
+        frameSrc: ["'none'"],
+        formAction: ["'self'"],
+        baseUri: ["'self'"],
+        reportUri: isProduction ? "/api/csp-report" : null,
+      },
     },
-  },
-  crossOriginEmbedderPolicy: false,
-  crossOriginResourcePolicy: { policy: "cross-origin" },
-}));
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  }),
+);
 
-app.use(cors({
-  origin: FRONTEND_URL,
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "x-api-key", "x-csrf-token"],
-  exposedHeaders: ["X-Request-Id", "X-Response-Time-MS", "X-DB-Time-MS"],
-}));
+app.use(
+  cors({
+    origin: FRONTEND_URL,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "x-api-key",
+      "x-csrf-token",
+    ],
+    exposedHeaders: ["X-Request-Id", "X-Response-Time-MS", "X-DB-Time-MS"],
+  }),
+);
 
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
@@ -130,7 +149,7 @@ app.get("/api/health", async (_req, res) => {
     const { data } = await supabase.from("projects").select("id").limit(1);
     dbOk = Array.isArray(data);
   } catch {
-    // DB check failed — respond with degraded status
+    logger.warn("Health check DB query failed");
   }
   res.json({
     status: dbOk ? "ok" : "degraded",
@@ -182,20 +201,27 @@ app.use((err, req, res, _next) => {
 
 // Cron: Alert evaluation every 2 minutes
 cron.schedule("*/2 * * * *", () => {
-  evaluateAllAlerts().catch((err) => logger.error({ err }, "[Cron] Alert evaluation failed"));
+  evaluateAllAlerts().catch((err) =>
+    logger.error({ err }, "[Cron] Alert evaluation failed"),
+  );
 });
 
 // Cron: Metrics broadcast every 10 seconds
 cron.schedule("*/10 * * * * *", async () => {
   try {
-    const { data: projects } = await supabase.from("projects").select("id").limit(50);
+    const { data: projects } = await supabase
+      .from("projects")
+      .select("id")
+      .limit(50);
     if (projects) {
       for (const project of projects) {
         const data = await getMetrics({ projectId: project.id });
         if (data) emitMetricsUpdate(project.id, data);
       }
     }
-    const healthRes = await fetch(`http://localhost:${PORT}/api/provider-health`);
+    const healthRes = await fetch(
+      `http://localhost:${PORT}/api/provider-health`,
+    );
     if (healthRes.ok) emitProviderHealth(await healthRes.json());
   } catch (err) {
     logger.error({ err }, "[Cron] Metrics broadcast error");
@@ -203,7 +229,10 @@ cron.schedule("*/10 * * * * *", async () => {
 });
 
 const server = app.listen(PORT, () => {
-  logger.info({ port: PORT, frontendUrl: FRONTEND_URL }, "TraceLLM API started");
+  logger.info(
+    { port: PORT, frontendUrl: FRONTEND_URL },
+    "TraceLLM API started",
+  );
 });
 
 startIngestWorker();
@@ -221,6 +250,9 @@ async function shutdown(signal) {
 
 process.on("SIGINT", () => shutdown("SIGINT"));
 process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("unhandledRejection", (reason) => {
+  logger.error({ err: reason }, "Unhandled promise rejection");
+});
 
 async function providerHealthHandler(_req, res) {
   const now = new Date();
@@ -238,9 +270,12 @@ async function providerHealthHandler(_req, res) {
 
     const total = recent?.length || 0;
     const errors = recent?.filter((r) => r.status === "error").length || 0;
-    const avgLatency = total > 0
-      ? Math.round(recent.reduce((s, r) => s + (r.latency_ms || 0), 0) / total)
-      : 0;
+    const avgLatency =
+      total > 0
+        ? Math.round(
+            recent.reduce((s, r) => s + (r.latency_ms || 0), 0) / total,
+          )
+        : 0;
 
     let status = "healthy";
     if (total === 0) status = "unknown";
@@ -251,7 +286,8 @@ async function providerHealthHandler(_req, res) {
       provider,
       status,
       avg_latency_ms: avgLatency,
-      success_rate: total > 0 ? Math.round(((total - errors) / total) * 100) : 0,
+      success_rate:
+        total > 0 ? Math.round(((total - errors) / total) * 100) : 0,
       recent_requests: total,
       recent_errors: errors,
     });

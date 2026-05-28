@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { supabase } from "../db/supabase.js";
+import { logger } from "../services/logger.js";
 
 const router = Router();
 
@@ -42,16 +43,17 @@ export function updateQueueMetrics(q) {
 }
 
 router.get("/metrics", async (_req, res) => {
-  const avgLatency = metrics.latencyCount > 0
-    ? Math.round(metrics.latencyTotal / metrics.latencyCount)
-    : 0;
+  const avgLatency =
+    metrics.latencyCount > 0
+      ? Math.round(metrics.latencyTotal / metrics.latencyCount)
+      : 0;
 
   let dbConnected = false;
   try {
     const { data } = await supabase.from("projects").select("id").limit(1);
     dbConnected = Array.isArray(data);
   } catch {
-    // supabase query failed
+    logger.warn("Internal metrics DB health check failed");
   }
 
   const { count: totalInferences } = await supabase
@@ -62,14 +64,19 @@ router.get("/metrics", async (_req, res) => {
   res.json({
     uptime_seconds: Math.round((Date.now() - metrics.startTime) / 1000),
     requests_total: metrics.requestsTotal,
-    requests_per_second: avgLatency > 0
-      ? (metrics.requestsTotal / ((Date.now() - metrics.startTime) / 1000)).toFixed(2)
-      : "0.00",
+    requests_per_second:
+      avgLatency > 0
+        ? (
+            metrics.requestsTotal /
+            ((Date.now() - metrics.startTime) / 1000)
+          ).toFixed(2)
+        : "0.00",
     avg_latency_ms: avgLatency,
     error_count: metrics.errorsTotal,
-    error_rate_percent: metrics.requestsTotal > 0
-      ? ((metrics.errorsTotal / metrics.requestsTotal) * 100).toFixed(2)
-      : "0.00",
+    error_rate_percent:
+      metrics.requestsTotal > 0
+        ? ((metrics.errorsTotal / metrics.requestsTotal) * 100).toFixed(2)
+        : "0.00",
     active_users: metrics.activeUsers.size,
     total_inferences: totalInferences || 0,
     token_usage_total: metrics.tokenUsageTotal,

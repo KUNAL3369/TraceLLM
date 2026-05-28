@@ -1,5 +1,9 @@
 import { Router } from "express";
-import { getProviderAdapter, getDefaultModel } from "../services/providerAdapter.js";
+import {
+  getProviderAdapter,
+  getDefaultModel,
+} from "../services/providerAdapter.js";
+import { logger } from "../services/logger.js";
 
 const router = Router();
 
@@ -11,7 +15,10 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "Messages are required" });
     }
 
-    const userApiKey = apiKey || process.env[`${provider.toUpperCase()}_API_KEY`] || process.env.OPENAI_API_KEY;
+    const userApiKey =
+      apiKey ||
+      process.env[`${provider.toUpperCase()}_API_KEY`] ||
+      process.env.OPENAI_API_KEY;
 
     if (!userApiKey) {
       return simulateChat(req, res);
@@ -26,27 +33,41 @@ router.post("/", async (req, res) => {
       res.setHeader("Connection", "keep-alive");
 
       try {
-        const streamIter = adapter.streamChat({ messages, model: resolvedModel });
+        const streamIter = adapter.streamChat({
+          messages,
+          model: resolvedModel,
+        });
         for await (const content of streamIter) {
           if (content) {
-            res.write(`data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`);
+            res.write(
+              `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\n`,
+            );
           }
         }
       } catch (streamErr) {
-        const errorMsg = adapter.normalizeError?.(streamErr) || streamErr.message;
+        const errorMsg =
+          adapter.normalizeError?.(streamErr) || streamErr.message;
         res.write(`data: ${JSON.stringify({ error: errorMsg })}\n\n`);
       }
       res.write("data: [DONE]\n\n");
       res.end();
     } else {
-      const result = await adapter.chat({ messages, model: resolvedModel, stream: false });
+      const result = await adapter.chat({
+        messages,
+        model: resolvedModel,
+        stream: false,
+      });
       return res.json({
         content: result.content,
-        usage: result.usage || { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+        usage: result.usage || {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+        },
       });
     }
   } catch (err) {
-    console.error("Chat error:", err);
+    logger.error({ err }, "Chat error");
     if (!res.headersSent) {
       return res.status(500).json({ error: err.message || "Chat failed" });
     }
@@ -70,7 +91,9 @@ function simulateChat(req, res) {
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
     for (const char of content) {
-      res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: char } }] })}\n\n`);
+      res.write(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: char } }] })}\n\n`,
+      );
     }
     res.write("data: [DONE]\n\n");
     res.end();

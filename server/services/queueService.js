@@ -83,7 +83,10 @@ export function startIngestWorker() {
       const { error } = await supabase.from("inference_logs").insert(payload);
 
       if (error) {
-        logger.error({ err: error, jobId: job.id }, "[Queue] Ingest worker DB error");
+        logger.error(
+          { err: error, jobId: job.id },
+          "[Queue] Ingest worker DB error",
+        );
         throw error;
       }
 
@@ -96,13 +99,13 @@ export function startIngestWorker() {
       connection: conn,
       concurrency: 5,
       limiter: { max: 50, duration: 1000 },
-    }
+    },
   );
 
   ingestWorker.on("failed", async (job, err) => {
     logger.error(
       { jobId: job.id, attempts: job.attemptsMade, error: err.message },
-      "[Queue] Job failed"
+      "[Queue] Job failed",
     );
 
     // Move to DLQ after all retries exhausted
@@ -134,7 +137,7 @@ export function startIngestWorker() {
       ]);
       updateQueueMetrics({ waiting, active, completed, failed, delayed });
     } catch {
-      // ignore poll error
+      logger.warn("[Queue] Metrics poll failed");
     }
   }, 10000);
 

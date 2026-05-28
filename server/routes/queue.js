@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { getQueue } from "../services/queueService.js";
+import { logger } from "../services/logger.js";
 
 const router = Router();
 
@@ -28,7 +29,8 @@ router.get("/status", async (_req, res) => {
       delayed,
       total: waiting + active + completed + failed + delayed,
     });
-  } catch {
+  } catch (err) {
+    logger.error({ err }, "Failed to get queue status");
     res.status(500).json({ error: "Failed to get queue status" });
   }
 });
@@ -55,7 +57,8 @@ router.get("/failed", async (_req, res) => {
         finishedOn: j.finishedOn,
       })),
     });
-  } catch {
+  } catch (err) {
+    logger.error({ err }, "Failed to get failed jobs");
     res.status(500).json({ error: "Failed to get failed jobs" });
   }
 });
@@ -66,7 +69,8 @@ router.post("/retry-all", async (_req, res) => {
     if (!queue) return res.json({ enabled: false });
     const count = await queue.retryJobs(0, 100, "failed");
     res.json({ retried: count });
-  } catch {
+  } catch (err) {
+    logger.error({ err }, "Failed to retry jobs");
     res.status(500).json({ error: "Failed to retry jobs" });
   }
 });

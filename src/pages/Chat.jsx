@@ -6,7 +6,13 @@ const PROVIDERS = [
   {
     id: "openrouter",
     name: "OpenRouter",
-    models: ["meta-llama/llama-3.3-70b-instruct:free", "openai/gpt-oss-20b:free", "openai/gpt-oss-120b:free", "nvidia/nemotron-nano-9b-v2:free", "qwen/qwen3-coder:free"],
+    models: [
+      "meta-llama/llama-3.3-70b-instruct:free",
+      "openai/gpt-oss-20b:free",
+      "openai/gpt-oss-120b:free",
+      "nvidia/nemotron-nano-9b-v2:free",
+      "qwen/qwen3-coder:free",
+    ],
   },
   {
     id: "openai",
@@ -16,19 +22,29 @@ const PROVIDERS = [
   {
     id: "anthropic",
     name: "Anthropic",
-    models: ["claude-3-haiku-20240307", "claude-3-sonnet-20240229", "claude-3-opus-20240229"],
+    models: [
+      "claude-3-haiku-20240307",
+      "claude-3-sonnet-20240229",
+      "claude-3-opus-20240229",
+    ],
   },
   {
     id: "groq",
     name: "Groq",
-    models: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "deepseek-r1-distill-llama-70b"],
+    models: [
+      "llama-3.3-70b-versatile",
+      "llama-3.1-8b-instant",
+      "deepseek-r1-distill-llama-70b",
+    ],
   },
 ];
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 async function getHeaders() {
-  const { data: { session } } = await supabase.auth.getSession();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
   return {
     "Content-Type": "application/json",
     ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
@@ -37,7 +53,10 @@ async function getHeaders() {
 
 async function fetchWithAuth(url, options = {}) {
   const headers = await getHeaders();
-  const res = await fetch(`${API_URL}${url}`, { ...options, headers: { ...headers, ...options.headers } });
+  const res = await fetch(`${API_URL}${url}`, {
+    ...options,
+    headers: { ...headers, ...options.headers },
+  });
   if (!res.ok) throw new Error(`Request failed: ${res.status}`);
   return res.json();
 }
@@ -72,6 +91,7 @@ export default function Chat() {
         setActiveId(data[0].id);
       }
     } catch {
+      console.warn("[Chat] Failed to load conversations");
       setConversations([]);
     } finally {
       setLoading(false);
@@ -82,10 +102,12 @@ export default function Chat() {
     try {
       const data = await fetchWithAuth(`/api/conversations/${id}`);
       setConversations((prev) =>
-        prev.map((c) => (c.id === id ? { ...c, messages: data.messages || [] } : c))
+        prev.map((c) =>
+          c.id === id ? { ...c, messages: data.messages || [] } : c,
+        ),
       );
     } catch {
-      // keep existing messages
+      console.warn("[Chat] Failed to load conversation messages");
     }
   }
 
@@ -102,7 +124,7 @@ export default function Chat() {
         body: JSON.stringify({ role, content, token_count: tokenCount || 0 }),
       });
     } catch {
-      // non-critical — log locally but don't block the user
+      console.warn("[Chat] Failed to persist message");
     }
   }
 
@@ -127,6 +149,9 @@ export default function Chat() {
           ...prev,
         ]);
       } catch {
+        console.warn(
+          "[Chat] Failed to create conversation, using local fallback",
+        );
         convId = `local_${Date.now()}`;
         setActiveId(convId);
         setConversations((prev) => [
@@ -140,8 +165,10 @@ export default function Chat() {
 
     setConversations((prev) =>
       prev.map((c) =>
-        c.id === convId ? { ...c, messages: [...(c.messages || []), userMsg] } : c
-      )
+        c.id === convId
+          ? { ...c, messages: [...(c.messages || []), userMsg] }
+          : c,
+      ),
     );
 
     await persistMessage(convId, "user", msg);
@@ -160,8 +187,10 @@ export default function Chat() {
     const assistantMsg = { role: "assistant", content: "" };
     setConversations((prev) =>
       prev.map((c) =>
-        c.id === convId ? { ...c, messages: [...(c.messages || []), assistantMsg] } : c
-      )
+        c.id === convId
+          ? { ...c, messages: [...(c.messages || []), assistantMsg] }
+          : c,
+      ),
     );
 
     try {
@@ -181,11 +210,11 @@ export default function Chat() {
                     messages: c.messages.map((m, i) =>
                       i === c.messages.length - 1
                         ? { ...m, content: m.content + token }
-                        : m
+                        : m,
                     ),
                   }
-                : c
-            )
+                : c,
+            ),
           );
         },
       });
@@ -205,11 +234,11 @@ export default function Chat() {
                   messages: c.messages.map((m, i) =>
                     i === c.messages.length - 1
                       ? { ...m, content: `Error: ${err.message}` }
-                      : m
+                      : m,
                   ),
                 }
-              : c
-          )
+              : c,
+          ),
         );
       }
     } finally {
@@ -263,7 +292,8 @@ export default function Chat() {
           )}
           {conversations.map((c) => {
             const lastMsg = c.messages?.[c.messages.length - 1];
-            const preview = lastMsg?.role === "user" ? lastMsg.content?.slice(0, 40) : "";
+            const preview =
+              lastMsg?.role === "user" ? lastMsg.content?.slice(0, 40) : "";
             const msgCount = c.messages?.length || 0;
             return (
               <button
@@ -280,9 +310,13 @@ export default function Chat() {
                     : "text-gray-400 hover:bg-[#0f172a] hover:text-white"
                 }`}
               >
-                <div className="truncate">{preview || c.user_identifier || "New Chat"}</div>
+                <div className="truncate">
+                  {preview || c.user_identifier || "New Chat"}
+                </div>
                 {msgCount > 0 && (
-                  <span className="text-xs text-gray-600">{msgCount} messages</span>
+                  <span className="text-xs text-gray-600">
+                    {msgCount} messages
+                  </span>
                 )}
               </button>
             );
@@ -301,7 +335,9 @@ export default function Chat() {
               className="rounded-lg border border-white/10 bg-[#0f172a] px-2 py-1 text-xs text-white focus:border-blue-500 focus:outline-none"
             >
               {PROVIDERS.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
               ))}
             </select>
             <span className="text-xs text-gray-500">Model:</span>
@@ -312,11 +348,15 @@ export default function Chat() {
               className="rounded-lg border border-white/10 bg-[#0f172a] px-2 py-1 text-xs text-white focus:border-blue-500 focus:outline-none"
             >
               {currentProvider?.models.map((m) => (
-                <option key={m} value={m}>{m}</option>
+                <option key={m} value={m}>
+                  {m}
+                </option>
               ))}
             </select>
           </div>
-          <span className="text-xs text-gray-600">{streaming ? "Streaming..." : "Ready"}</span>
+          <span className="text-xs text-gray-600">
+            {streaming ? "Streaming..." : "Ready"}
+          </span>
         </div>
 
         <div className="flex-1 space-y-4 overflow-y-auto p-4">
@@ -326,7 +366,10 @@ export default function Chat() {
             </div>
           )}
           {active?.messages?.map((msg, i) => (
-            <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+            <div
+              key={i}
+              className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+            >
               <div
                 className={`max-w-[75%] rounded-2xl px-4 py-2 text-sm ${
                   msg.role === "user"
@@ -334,7 +377,12 @@ export default function Chat() {
                     : "bg-[#0f172a] text-gray-200"
                 }`}
               >
-                <div className="whitespace-pre-wrap">{msg.content || (streaming && i === active.messages.length - 1 ? "..." : "")}</div>
+                <div className="whitespace-pre-wrap">
+                  {msg.content ||
+                    (streaming && i === active.messages.length - 1
+                      ? "..."
+                      : "")}
+                </div>
               </div>
             </div>
           ))}
@@ -347,7 +395,9 @@ export default function Chat() {
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
+              onKeyDown={(e) =>
+                e.key === "Enter" && !e.shiftKey && sendMessage()
+              }
               placeholder="Type a message..."
               disabled={streaming}
               className="flex-1 rounded-xl border border-white/10 bg-[#0f172a] px-4 py-2 text-sm text-white placeholder-gray-500 focus:border-blue-500 focus:outline-none disabled:opacity-50"

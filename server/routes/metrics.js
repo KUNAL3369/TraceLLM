@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { getMetrics } from "../services/metricsService.js";
+import { logger } from "../services/logger.js";
 
 const router = Router();
 
@@ -19,7 +20,7 @@ router.get("/", async (req, res) => {
 
     return res.json(data || null);
   } catch (err) {
-    console.error("Metrics error:", err);
+    logger.error({ err }, "Metrics error");
     return res.status(500).json({ error: "Failed to fetch metrics" });
   }
 });

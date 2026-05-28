@@ -1,3 +1,5 @@
+import { logger } from "./logger.js";
+
 export async function sendWebhookAlert(webhookUrl, payload) {
   if (!webhookUrl) return { success: false, reason: "No webhook URL" };
 
@@ -25,7 +27,7 @@ export async function sendWebhookAlert(webhookUrl, payload) {
     if (!res.ok) throw new Error(`Webhook returned ${res.status}`);
     return { success: true };
   } catch (err) {
-    console.error("Webhook alert error:", err);
+    logger.error({ err, webhookUrl }, "Webhook alert error");
     return { success: false, error: err.message };
   }
 }

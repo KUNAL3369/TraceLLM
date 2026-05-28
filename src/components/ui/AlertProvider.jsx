@@ -1,4 +1,10 @@
-import { createContext, useContext, useEffect, useRef, useCallback } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useCallback,
+} from "react";
 import toast from "react-hot-toast";
 
 const AlertContext = createContext(null);
@@ -12,7 +18,9 @@ export function AlertProvider({ children }) {
         <div className="flex items-center gap-3">
           <span className="text-lg">🚨</span>
           <div className="flex-1">
-            <p className="text-sm font-medium text-white">{alert.title || "Alert Triggered"}</p>
+            <p className="text-sm font-medium text-white">
+              {alert.title || "Alert Triggered"}
+            </p>
             <p className="text-xs text-gray-400">{alert.message || ""}</p>
           </div>
           <button
@@ -23,7 +31,13 @@ export function AlertProvider({ children }) {
           </button>
         </div>
       ),
-      { duration: 8000, style: { background: "#1e293b", border: "1px solid rgba(239,68,68,0.3)" } }
+      {
+        duration: 8000,
+        style: {
+          background: "#1e293b",
+          border: "1px solid rgba(239,68,68,0.3)",
+        },
+      },
     );
   }, []);
 
@@ -40,7 +54,7 @@ export function AlertProvider({ children }) {
         const payload = JSON.parse(event.data);
         showAlertToast(payload);
       } catch {
-        // ignore parse errors
+        console.warn("[SSE] Failed to parse alert event");
       }
     });
 
