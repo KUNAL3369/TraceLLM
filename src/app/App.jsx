@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore } from "../stores/authStore";
 import AppLayout from "../components/layout/AppLayout";
 import ErrorBoundary from "../components/ui/ErrorBoundary";
+import { AlertProvider } from "../components/ui/AlertProvider";
 
 const Login = lazy(() => import("../pages/Login"));
 const Signup = lazy(() => import("../pages/Signup"));
@@ -19,7 +20,12 @@ const AuditLogs = lazy(() => import("../pages/AuditLogs"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { staleTime: 30000, retry: 1, refetchOnWindowFocus: false },
+    queries: {
+      staleTime: 60000,
+      gcTime: 300000,
+      retry: 2,
+      refetchOnWindowFocus: false,
+    },
   },
 });
 
@@ -58,24 +64,26 @@ export default function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <Suspense fallback={<LoadingFallback />}>
-            <Routes>
-              <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
-              <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
-              <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-              <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
-              <Route path="/conversations" element={<ProtectedRoute><Conversations /></ProtectedRoute>} />
-              <Route path="/logs" element={<ProtectedRoute><InferenceLogs /></ProtectedRoute>} />
-              <Route path="/errors" element={<ProtectedRoute><Errors /></ProtectedRoute>} />
-              <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
-              <Route path="/alerts" element={<ProtectedRoute><Alerts /></ProtectedRoute>} />
-              <Route path="/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
-              <Route path="/audit" element={<ProtectedRoute><AuditLogs /></ProtectedRoute>} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </Suspense>
-        </BrowserRouter>
+        <AlertProvider>
+          <BrowserRouter>
+            <Suspense fallback={<LoadingFallback />}>
+              <Routes>
+                <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+                <Route path="/signup" element={<PublicRoute><Signup /></PublicRoute>} />
+                <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+                <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
+                <Route path="/conversations" element={<ProtectedRoute><Conversations /></ProtectedRoute>} />
+                <Route path="/logs" element={<ProtectedRoute><InferenceLogs /></ProtectedRoute>} />
+                <Route path="/errors" element={<ProtectedRoute><Errors /></ProtectedRoute>} />
+                <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
+                <Route path="/alerts" element={<ProtectedRoute><Alerts /></ProtectedRoute>} />
+                <Route path="/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
+                <Route path="/audit" element={<ProtectedRoute><AuditLogs /></ProtectedRoute>} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
+          </BrowserRouter>
+        </AlertProvider>
       </QueryClientProvider>
     </ErrorBoundary>
   );

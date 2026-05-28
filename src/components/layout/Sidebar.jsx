@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
 import { useAuthStore } from "../../stores/authStore";
 import { useProjectStore } from "../../stores/projectStore";
+import { useTheme } from "../../stores/themeStore";
 
 const navItems = [
   { to: "/", label: "Dashboard", icon: "📊" },
@@ -17,6 +18,7 @@ const navItems = [
 export default function Sidebar() {
   const { user, signOut } = useAuthStore();
   const { projects, selectedProjectId, setSelectedProject, loading } = useProjectStore();
+  const { isDark, toggleTheme } = useTheme();
 
   return (
     <aside className="fixed left-0 top-0 flex h-screen w-60 flex-col border-r border-white/10 bg-[#0f172a]">
@@ -45,6 +47,18 @@ export default function Sidebar() {
         </select>
       </div>
 
+      <div className="flex items-center justify-between border-b border-white/10 px-4 py-2">
+        <span className="text-[10px] font-medium uppercase tracking-wider text-gray-500">
+          Navigation
+        </span>
+        <button
+          onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true }))}
+          className="rounded bg-[#1e293b] px-1.5 py-0.5 text-[10px] text-gray-500"
+        >
+          Ctrl+K
+        </button>
+      </div>
+
       <nav className="flex-1 overflow-y-auto p-3">
         {navItems.map((item) => (
           <NavLink
@@ -67,12 +81,21 @@ export default function Sidebar() {
 
       <div className="border-t border-white/10 p-4">
         <div className="mb-2 truncate text-xs text-gray-500">{user?.email}</div>
-        <button
-          onClick={signOut}
-          className="w-full rounded-lg bg-[#1e293b] px-3 py-2 text-xs font-medium text-gray-400 transition-colors hover:bg-red-900/30 hover:text-red-400"
-        >
-          Sign Out
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={toggleTheme}
+            className="flex-1 rounded-lg bg-[#1e293b] px-3 py-2 text-xs text-gray-400 transition-colors hover:text-white"
+            title={`Switch to ${isDark ? "light" : "dark"} mode`}
+          >
+            {isDark ? "☀️ Light" : "🌙 Dark"}
+          </button>
+          <button
+            onClick={signOut}
+            className="rounded-lg bg-[#1e293b] px-3 py-2 text-xs text-gray-400 transition-colors hover:bg-red-900/30 hover:text-red-400"
+          >
+            Sign Out
+          </button>
+        </div>
       </div>
     </aside>
   );

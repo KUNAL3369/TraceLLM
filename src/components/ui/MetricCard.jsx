@@ -1,4 +1,4 @@
-export default function MetricCard({ title, value, unit, trend, icon, color = "#344e41" }) {
+export default function MetricCard({ title, value, unit, trend, icon }) {
   const isUp = trend > 0;
   return (
     <div className="rounded-2xl border border-white/10 bg-[#1e293b] p-5 shadow-lg">

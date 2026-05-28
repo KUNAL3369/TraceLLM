@@ -1,5 +1,4 @@
 import { supabase } from "../db/supabase.js";
-import { redactLogPayload } from "./piiRedaction.js";
 
 export async function trackUsage({ projectId, requestCount = 1, tokenCount = 0, costEstimate = 0 }) {
   const now = new Date();

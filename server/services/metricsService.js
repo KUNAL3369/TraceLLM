@@ -1,5 +1,5 @@
 import { supabase } from "../db/supabase.js";
-import { estimateCost, estimateTotalCost, formatCost } from "./costService.js";
+import { estimateTotalCost } from "./costService.js";
 
 export async function getMetrics({ projectId, startDate, endDate }) {
   let query = supabase.from("inference_logs").select("*");

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useApi } from "../hooks/useApi";
 import { useProjectStore } from "../stores/projectStore";
-import { supabase } from "../lib/supabase";
 
 const statusColors = {
   success: "text-green-400 bg-green-900/30",

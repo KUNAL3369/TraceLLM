@@ -263,7 +263,7 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody>
-                {models.map((m, i) => (
+                {models.map((m) => (
                   <tr key={m.name} className="border-b border-white/5 transition-colors hover:bg-[#1e293b]/50">
                     <td className="px-4 py-3 font-mono text-xs text-white">{m.name}</td>
                     <td className="px-4 py-3 text-gray-300">{m.count}</td>
