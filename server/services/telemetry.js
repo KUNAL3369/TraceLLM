@@ -1,9 +1,12 @@
 import { NodeSDK } from "@opentelemetry/sdk-node";
-import { getNodeAutoInstrumentations } from "@opentelemetry/instrumentation-http";
+import { HttpInstrumentation } from "@opentelemetry/instrumentation-http";
 import { ExpressInstrumentation } from "@opentelemetry/instrumentation-express";
 import { IORedisInstrumentation } from "@opentelemetry/instrumentation-ioredis";
-import { Resource } from "@opentelemetry/resources";
-import { SemanticResourceAttributes } from "@opentelemetry/semantic-conventions";
+import { resourceFromAttributes } from "@opentelemetry/resources";
+import {
+  ATTR_SERVICE_NAME,
+  ATTR_SERVICE_VERSION,
+} from "@opentelemetry/semantic-conventions";
 import {
   ConsoleSpanExporter,
   SimpleSpanProcessor,
@@ -15,12 +18,12 @@ export function startTelemetry() {
   if (!process.env.OTEL_ENABLED && !isProd) return;
 
   const sdk = new NodeSDK({
-    resource: new Resource({
-      [SemanticResourceAttributes.SERVICE_NAME]: "tracellm-api",
-      [SemanticResourceAttributes.SERVICE_VERSION]: "2.0.0",
+    resource: resourceFromAttributes({
+      [ATTR_SERVICE_NAME]: "tracellm-api",
+      [ATTR_SERVICE_VERSION]: "2.0.0",
     }),
     instrumentations: [
-      ...getNodeAutoInstrumentations(),
+      new HttpInstrumentation(),
       new ExpressInstrumentation(),
       new IORedisInstrumentation(),
     ],
