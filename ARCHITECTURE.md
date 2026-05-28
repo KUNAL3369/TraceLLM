@@ -297,3 +297,96 @@ Regex-based detection and redaction for 7 categories:
 - JWTs → `[REDACTED_JWT]`
 
 Applied to `request_preview` and `response_preview` fields when `pii_redaction_enabled` is true on the project. Applied in both direct-write path and BullMQ worker.
+
+---
+
+## Real-Time Metrics Architecture (SSE)
+
+### Design Decision
+
+Server-Sent Events (SSE) were chosen over WebSockets for real-time metrics because:
+
+- **HTTP-native** — Works through standard proxies, load balancers, and firewalls
+- **Auto-reconnect** — Browser `EventSource` API reconnects automatically on dropped connections
+- **Unidirectional** — Server-to-client is the only direction needed for metrics streaming
+- **No library** — Uses Node's built-in `EventEmitter` (zero dependencies)
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Browser (React)                        │
+│                                                          │
+│  Dashboard.jsx                                           │
+│       │                                                  │
+│       │ useRealtimeMetrics(projectId)                    │
+│       ▼                                                  │
+│  EventSource(/api/realtime/metrics/stream?project_id=)   │
+│       │                                                  │
+│       │  onmessage → { metrics, providerHealth }         │
+│       │  onerror → reconnect in 3s                       │
+│       ▼                                                  │
+│  React state updated → UI re-renders                     │
+└───────────────────────┬──────────────────────────────────┘
+                        │ SSE stream (text/event-stream)
+                        │ Auth: Bearer JWT
+                        ▼
+┌──────────────────────────────────────────────────────────┐
+│                   Express Server                          │
+│                                                           │
+│  GET /api/realtime/metrics/stream                         │
+│       │                                                   │
+│       │ 1. userAuth middleware validates JWT              │
+│       │ 2. Subscribe to eventBus for projectId            │
+│       │ 3. Send initial "connected" event                 │
+│       │ 4. Keep response open (no res.end)                │
+│       │                                                   │
+│       ▼                                                   │
+│  ┌──────────────────────────────────────────┐             │
+│  │         Event Bus (EventEmitter)         │             │
+│  │                                          │             │
+│  │  Channels:                               │             │
+│  │    metrics:{projectId}  ──► metrics data │             │
+│  │    provider-health      ──► health data  │             │
+│  │    alerts:{projectId}   ──► alert events │             │
+│  └──────────────────┬───────────────────────┘             │
+│                     │                                     │
+│                     │ 10-second cron broadcast            │
+│                     ▼                                     │
+│  ┌──────────────────────────────────────────┐             │
+│  │         Metrics Broadcast Cron            │             │
+│  │  (*/10 * * * * *)                         │             │
+│  │                                           │             │
+│  │  For each project:                        │             │
+│  │    getMetrics(projectId)                  │             │
+│  │    emitMetricsUpdate(projectId, data)     │             │
+│  │                                           │             │
+│  │  Then:                                    │             │
+│  │    fetch(/api/provider-health)            │             │
+│  │    emitProviderHealth(healthData)         │             │
+│  └───────────────────────────────────────────┘             │
+└───────────────────────────────────────────────────────────┘
+```
+
+### Client-Side Hook (`src/hooks/useRealtimeMetrics.js`)
+
+- Creates `EventSource` on mount with the project ID
+- Listens for `metrics`, `provider-health`, and `connected` events
+- Auto-reconnects on error with a 3-second delay
+- Tracks connection state (`connected` flag)
+- Cleans up EventSource on unmount
+- Reconnects when `projectId` changes
+
+### Server-Side SSE (`server/routes/realtime.js`)
+
+- Sets headers: `Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connection: keep-alive`
+- Subscribes to event bus on mount
+- Sends heartbeat comment every 30 seconds to keep connection alive
+- Removes listener and cleans up on client disconnect
+
+### Limitations
+
+- **Auth with EventSource**: `EventSource` doesn't support custom headers. The current implementation uses `userAuth` middleware, which requires the JWT token. EventSource only supports URL-based parameters. For production, use cookie-based auth or pass token as a query parameter (with HTTPS).
+- **Single-process**: The event bus uses in-memory `EventEmitter`. In multi-process deployments, a pub/sub system (Redis, NATS) would be needed.
+- **No backpressure**: The server writes to all connected clients regardless of client consumption rate. Acceptable for metrics data (~2KB per broadcast).
+

@@ -15,10 +15,13 @@ import alertsRouter from "./routes/alerts.js";
 import billingRouter from "./routes/billing.js";
 import auditRouter from "./routes/audit.js";
 import notificationsRouter from "./routes/notifications.js";
+import realtimeRouter from "./routes/realtime.js";
 import { userAuth, apiKeyAuth } from "./middleware/apiKeyAuth.js";
 import { evaluateAllAlerts } from "./services/alertEvaluator.js";
 import { startIngestWorker } from "./services/queueService.js";
 import { supabase } from "./db/supabase.js";
+import { getMetrics } from "./services/metricsService.js";
+import { emitMetricsUpdate, emitProviderHealth } from "./services/eventBus.js";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -56,8 +59,21 @@ const ingestLimiter = rateLimit({
 app.use("/api", generalLimiter);
 app.set("trust proxy", 1);
 
-app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok", service: "TraceLLM API", version: "2.0.0" });
+const startTime = Date.now();
+
+app.get("/api/health", async (_req, res) => {
+  let dbOk = false;
+  try {
+    const { data } = await supabase.from("projects").select("id").limit(1);
+    dbOk = Array.isArray(data);
+  } catch {}
+  res.json({
+    status: dbOk ? "ok" : "degraded",
+    service: "TraceLLM API",
+    version: "2.0.0",
+    uptime_ms: Date.now() - startTime,
+    database: dbOk ? "connected" : "disconnected",
+  });
 });
 
 app.use("/api/projects", userAuth, projectsRouter);
@@ -70,6 +86,7 @@ app.use("/api/metrics", userAuth, metricsRouter);
 app.use("/api/chat", userAuth, chatRouter);
 app.use("/api/provider-health", userAuth, providerHealthHandler);
 app.use("/api/ingest", ingestLimiter, apiKeyAuth, ingestRouter);
+app.use("/api/realtime", userAuth, realtimeRouter);
 
 app.use((err, _req, res, _next) => {
   console.error("Unhandled error:", err);
@@ -78,6 +95,22 @@ app.use((err, _req, res, _next) => {
 
 cron.schedule("*/2 * * * *", () => {
   evaluateAllAlerts().catch((err) => console.error("[Cron] Alert evaluation failed:", err));
+});
+
+cron.schedule("*/10 * * * * *", async () => {
+  try {
+    const { data: projects } = await supabase.from("projects").select("id").limit(50);
+    if (projects) {
+      for (const project of projects) {
+        const data = await getMetrics({ projectId: project.id });
+        if (data) emitMetricsUpdate(project.id, data);
+      }
+    }
+    const healthRes = await fetch(`http://localhost:${PORT}/api/provider-health`);
+    if (healthRes.ok) emitProviderHealth(await healthRes.json());
+  } catch (err) {
+    console.error("[Cron] Metrics broadcast error:", err);
+  }
 });
 
 app.listen(PORT, () => {

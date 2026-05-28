@@ -4,12 +4,11 @@ import {
   BarChart, Bar, PieChart, Pie, Cell,
 } from "recharts";
 import MetricCard from "../components/ui/MetricCard";
+import { MetricCardSkeleton, EmptyState } from "../components/ui/DashboardComponents";
 import { useProjectStore } from "../stores/projectStore";
-import { supabase } from "../lib/supabase";
+import { useRealtimeMetrics } from "../hooks/useRealtimeMetrics";
 
 const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"];
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 function StatusDot({ status }) {
   const colors = { healthy: "bg-green-400", degraded: "bg-amber-400", down: "bg-red-400", unknown: "bg-gray-500" };
@@ -23,47 +22,34 @@ function formatCost(cents) {
 }
 
 export default function Dashboard() {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [alerts, setAlerts] = useState([]);
-  const [providerHealth, setProviderHealth] = useState([]);
   const selectedProjectId = useProjectStore((s) => s.selectedProjectId);
+  const { metrics, providerHealth, connected } = useRealtimeMetrics(selectedProjectId);
+  const [data, setData] = useState(null);
+  const [alerts, setAlerts] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchMetrics() {
-      setLoading(true);
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        const params = new URLSearchParams();
-        if (selectedProjectId) params.set("project_id", selectedProjectId);
-
-        const res = await fetch(`${API_URL}/api/metrics?${params}`, {
-          headers: session ? { Authorization: `Bearer ${session.access_token}` } : {},
-        });
-        if (res.ok) {
-          const json = await res.json();
-          setData(json);
-        }
-      } catch (err) {
-        console.error("Metrics fetch error:", err);
-      } finally {
-        setLoading(false);
-      }
+    if (metrics) {
+      setData(metrics);
+      setLoading(false);
     }
+  }, [metrics]);
 
-    fetchMetrics();
-
-    fetch(`${API_URL}/api/provider-health`).then((r) => r.ok && r.json()).then(setProviderHealth).catch(() => {});
+  useEffect(() => {
+    if (!connected) return;
     if (selectedProjectId) {
-      fetch(`${API_URL}/api/alerts/events?project_id=${selectedProjectId}`)
+      fetch(`/api/alerts/events?project_id=${selectedProjectId}`)
         .then((r) => r.ok && r.json())
         .then((events) => setAlerts(events?.filter((e) => e.status === "triggered") || []))
         .catch(() => {});
     }
+  }, [selectedProjectId, connected]);
 
-    const interval = setInterval(fetchMetrics, 30000);
-    return () => clearInterval(interval);
-  }, [selectedProjectId]);
+  const summary = data?.summary || {};
+  const trends = data?.trends || [];
+  const providers = data?.providers || [];
+  const models = data?.models || [];
+  const costData = data?.cost || {};
 
   if (loading && !data) {
     return (
@@ -71,18 +57,47 @@ export default function Dashboard() {
         <div className="h-6 w-48 animate-pulse rounded bg-[#1e293b]" />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-24 animate-pulse rounded-2xl bg-[#1e293b]" />
+            <MetricCardSkeleton key={i} />
+          ))}
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <MetricCardSkeleton key={i} />
           ))}
         </div>
       </div>
     );
   }
 
-  const summary = data?.summary || {};
-  const trends = data?.trends || [];
-  const providers = data?.providers || [];
-  const models = data?.models || [];
-  const costData = data?.cost || {};
+  if (!loading && !data) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+            <p className="text-sm text-gray-400">Real-time LLM inference metrics</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`inline-block h-2 w-2 rounded-full ${connected ? "bg-green-400" : "bg-amber-400"}`} />
+            <span className="text-xs text-gray-500">{connected ? "Live" : "Reconnecting..."}</span>
+          </div>
+        </div>
+        <EmptyState
+          icon="📡"
+          title="No data yet"
+          description="Send your first LLM request through the Chat demo or SDK to see metrics appear here in real time."
+          action={
+            <a
+              href="/chat"
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              Try the Chat Demo
+            </a>
+          }
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -102,8 +117,26 @@ export default function Dashboard() {
         </div>
       )}
 
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Dashboard</h1>
+          <p className="text-sm text-gray-400">Real-time LLM inference metrics</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {selectedProjectId && (
+            <span className="rounded-full bg-blue-900/30 px-3 py-1 text-xs text-blue-400">
+              {useProjectStore.getState().projects.find((p) => p.id === selectedProjectId)?.name || "Selected"}
+            </span>
+          )}
+          <div className="flex items-center gap-1.5 rounded-full bg-[#1e293b] px-3 py-1">
+            <span className={`inline-block h-2 w-2 rounded-full ${connected ? "bg-green-400" : "bg-amber-400"}`} />
+            <span className="text-xs text-gray-500">{connected ? "Live" : "Reconnecting..."}</span>
+          </div>
+        </div>
+      </div>
+
       {providerHealth.length > 0 && (
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           {providerHealth.map((p) => (
             <div key={p.provider} className="flex items-center gap-2 rounded-xl border border-white/10 bg-[#1e293b] px-3 py-2">
               <StatusDot status={p.status} />
@@ -116,18 +149,6 @@ export default function Dashboard() {
           ))}
         </div>
       )}
-
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Dashboard</h1>
-          <p className="text-sm text-gray-400">Real-time LLM inference metrics</p>
-        </div>
-        {selectedProjectId && (
-          <span className="rounded-full bg-blue-900/30 px-3 py-1 text-xs text-blue-400">
-            Project: {useProjectStore.getState().projects.find((p) => p.id === selectedProjectId)?.name || "Selected"}
-          </span>
-        )}
-      </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard title="Total Requests" value={(summary.total_requests || 0).toLocaleString()} unit="" icon="📨" />
@@ -150,69 +171,85 @@ export default function Dashboard() {
         <MetricCard title="Total Completion" value={(summary.total_completion_tokens || 0).toLocaleString()} unit="" icon="📄" />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-2xl border border-white/10 bg-[#1e293b] p-5">
-          <h3 className="mb-4 text-sm font-medium text-gray-300">Request Throughput</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={trends}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis dataKey="time" tick={{ fill: "#94a3b8", fontSize: 11 }} />
-              <YAxis tick={{ fill: "#94a3b8", fontSize: 11 }} />
-              <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, color: "#fff" }} />
-              <Line type="monotone" dataKey="requests" stroke="#3b82f6" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+      {trends.length === 0 && providers.length === 0 ? (
+        <EmptyState
+          icon="📊"
+          title="Insufficient data for charts"
+          description="Charts will appear once more requests have been processed."
+        />
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-2">
+          {trends.length > 0 && (
+            <div className="rounded-2xl border border-white/10 bg-[#1e293b] p-5">
+              <h3 className="mb-4 text-sm font-medium text-gray-300">Request Throughput</h3>
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={trends}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <XAxis dataKey="time" tick={{ fill: "#94a3b8", fontSize: 11 }} />
+                  <YAxis tick={{ fill: "#94a3b8", fontSize: 11 }} />
+                  <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, color: "#fff" }} />
+                  <Line type="monotone" dataKey="requests" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
 
-        <div className="rounded-2xl border border-white/10 bg-[#1e293b] p-5">
-          <h3 className="mb-4 text-sm font-medium text-gray-300">Latency Trend (ms)</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={trends}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis dataKey="time" tick={{ fill: "#94a3b8", fontSize: 11 }} />
-              <YAxis tick={{ fill: "#94a3b8", fontSize: 11 }} />
-              <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, color: "#fff" }} />
-              <ReferenceLine y={500} stroke="#f59e0b" strokeDasharray="6 6" label={{ value: "Threshold", fill: "#f59e0b", fontSize: 11 }} />
-              <Line type="monotone" dataKey="latency" stroke="#10b981" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+          {trends.length > 0 && (
+            <div className="rounded-2xl border border-white/10 bg-[#1e293b] p-5">
+              <h3 className="mb-4 text-sm font-medium text-gray-300">Latency Trend (ms)</h3>
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={trends}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <XAxis dataKey="time" tick={{ fill: "#94a3b8", fontSize: 11 }} />
+                  <YAxis tick={{ fill: "#94a3b8", fontSize: 11 }} />
+                  <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, color: "#fff" }} />
+                  <ReferenceLine y={500} stroke="#f59e0b" strokeDasharray="6 6" label={{ value: "Threshold", fill: "#f59e0b", fontSize: 11 }} />
+                  <Line type="monotone" dataKey="latency" stroke="#10b981" strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
 
-        <div className="rounded-2xl border border-white/10 bg-[#1e293b] p-5">
-          <h3 className="mb-4 text-sm font-medium text-gray-300">Token Usage Trend</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={trends}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis dataKey="time" tick={{ fill: "#94a3b8", fontSize: 11 }} />
-              <YAxis tick={{ fill: "#94a3b8", fontSize: 11 }} />
-              <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, color: "#fff" }} />
-              <Bar dataKey="tokens" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+          {trends.length > 0 && (
+            <div className="rounded-2xl border border-white/10 bg-[#1e293b] p-5">
+              <h3 className="mb-4 text-sm font-medium text-gray-300">Token Usage Trend</h3>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={trends}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <XAxis dataKey="time" tick={{ fill: "#94a3b8", fontSize: 11 }} />
+                  <YAxis tick={{ fill: "#94a3b8", fontSize: 11 }} />
+                  <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, color: "#fff" }} />
+                  <Bar dataKey="tokens" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
 
-        <div className="rounded-2xl border border-white/10 bg-[#1e293b] p-5">
-          <h3 className="mb-4 text-sm font-medium text-gray-300">Provider Distribution</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <PieChart>
-              <Pie data={providers} cx="50%" cy="50%" innerRadius={50} outerRadius={90} paddingAngle={4} dataKey="value">
-                {providers.map((_, i) => (
-                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
+          {providers.length > 0 && (
+            <div className="rounded-2xl border border-white/10 bg-[#1e293b] p-5">
+              <h3 className="mb-4 text-sm font-medium text-gray-300">Provider Distribution</h3>
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie data={providers} cx="50%" cy="50%" innerRadius={50} outerRadius={90} paddingAngle={4} dataKey="value">
+                    {providers.map((_, i) => (
+                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, color: "#fff" }} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="mt-2 flex flex-wrap justify-center gap-3">
+                {providers.map((p, i) => (
+                  <span key={p.name} className="flex items-center gap-1 text-xs text-gray-400">
+                    <span className="h-2 w-2 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
+                    {p.name} {p.value}%
+                  </span>
                 ))}
-              </Pie>
-              <Tooltip contentStyle={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, color: "#fff" }} />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="mt-2 flex flex-wrap justify-center gap-3">
-            {providers.map((p, i) => (
-              <span key={p.name} className="flex items-center gap-1 text-xs text-gray-400">
-                <span className="h-2 w-2 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
-                {p.name} {p.value}%
-              </span>
-            ))}
-          </div>
+              </div>
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       {models.length > 0 && (
         <div className="rounded-2xl border border-white/10 bg-[#1e293b] p-5">
