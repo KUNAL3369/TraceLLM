@@ -6,6 +6,7 @@ import {
   useCallback,
 } from "react";
 import toast from "react-hot-toast";
+import { supabase } from "../../lib/supabase";
 
 const AlertContext = createContext(null);
 
@@ -42,24 +43,33 @@ export function AlertProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    const token = localStorage.getItem("tracellm-auth-token");
-    if (!token) return;
+    let cancelled = false;
 
-    const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
-    const source = new EventSource(`${API_URL}/api/realtime/metrics/stream`);
-    sourceRef.current = source;
+    (async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token || cancelled) return;
 
-    source.addEventListener("alert", (event) => {
-      try {
-        const payload = JSON.parse(event.data);
-        showAlertToast(payload);
-      } catch {
-        console.warn("[SSE] Failed to parse alert event");
-      }
-    });
+      const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
+      const source = new EventSource(
+        `${API_URL}/api/realtime/metrics/stream?token=${session.access_token}`,
+      );
+      sourceRef.current = source;
+
+      source.addEventListener("alert", (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          showAlertToast(payload);
+        } catch {
+          console.warn("[SSE] Failed to parse alert event");
+        }
+      });
+    })();
 
     return () => {
-      source.close();
+      cancelled = true;
+      sourceRef.current?.close();
     };
   }, [showAlertToast]);
 

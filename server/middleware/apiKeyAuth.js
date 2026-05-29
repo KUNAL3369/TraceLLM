@@ -31,12 +31,18 @@ export async function apiKeyAuth(req, res, next) {
 
 export async function userAuth(req, res, next) {
   const header = req.headers["authorization"];
-  if (!header || !header.startsWith("Bearer ")) {
+  const token = header?.startsWith("Bearer ")
+    ? header.slice(7)
+    : req.query.token;
+
+  if (!token) {
     return res.status(401).json({ error: "Missing auth token" });
   }
 
-  const token = header.slice(7);
-  const { data: { user }, error } = await supabase.auth.getUser(token);
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser(token);
 
   if (error || !user) {
     return res.status(401).json({ error: "Invalid auth token" });

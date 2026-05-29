@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { supabase } from "../lib/supabase";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
@@ -15,11 +16,16 @@ export function useRealtimeMetrics(projectId) {
   useEffect(() => {
     projectIdRef.current = projectId;
 
-    const connect = () => {
+    const connect = async () => {
       if (sourceRef.current) sourceRef.current.close();
 
       const params = new URLSearchParams();
       if (projectIdRef.current) params.set("project_id", projectIdRef.current);
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session?.access_token) params.set("token", session.access_token);
 
       const url = `${API_URL}/api/realtime/metrics/stream?${params}`;
       const source = new EventSource(url);
