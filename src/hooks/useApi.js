@@ -12,9 +12,19 @@ export function useApi(endpoint) {
     setLoading(true);
     setError(null);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       const headers = { "Content-Type": "application/json" };
       if (session) headers.Authorization = `Bearer ${session.access_token}`;
+      if (import.meta.env.DEV) {
+        console.log(
+          `[useApi] GET ${endpoint} — token:`,
+          !!session,
+          "auth header:",
+          !!headers.Authorization,
+        );
+      }
 
       const res = await fetch(`${API_URL}${endpoint}`, { headers });
       if (!res.ok) {

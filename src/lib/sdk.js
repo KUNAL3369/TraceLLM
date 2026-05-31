@@ -13,10 +13,19 @@ async function getHeaders() {
   const {
     data: { session },
   } = await supabase.auth.getSession();
-  return {
+  const headers = {
     "Content-Type": "application/json",
     ...(session ? { Authorization: `Bearer ${session.access_token}` } : {}),
   };
+  if (import.meta.env.DEV) {
+    console.log(
+      "[SDK] Token present:",
+      !!session,
+      "Authorization set:",
+      !!headers.Authorization,
+    );
+  }
+  return headers;
 }
 
 function getProjectId() {
@@ -254,9 +263,17 @@ async function ingestLog({
   };
 
   try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const ingestHeaders = { "Content-Type": "application/json" };
+    if (session) ingestHeaders.Authorization = `Bearer ${session.access_token}`;
+    if (import.meta.env.DEV) {
+      console.log("[SDK] Ingest auth token present:", !!session);
+    }
     const res = await fetchWithRetry(`${API_BASE}/api/ingest`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: ingestHeaders,
       body: JSON.stringify(payload),
     });
 

@@ -19,7 +19,7 @@ import notificationsRouter from "./routes/notifications.js";
 import realtimeRouter from "./routes/realtime.js";
 import queueRouter from "./routes/queue.js";
 import internalRouter from "./routes/internal.js";
-import { userAuth, apiKeyAuth } from "./middleware/apiKeyAuth.js";
+import { userAuth, ingestAuth } from "./middleware/apiKeyAuth.js";
 import { requestId } from "./middleware/requestId.js";
 import { requestTiming } from "./middleware/requestTiming.js";
 import { evaluateAllAlerts } from "./services/alertEvaluator.js";
@@ -180,81 +180,11 @@ app.use("/api/notifications", userAuth, notificationsRouter);
 app.use("/api/metrics", userAuth, metricsRouter);
 app.use("/api/chat", userAuth, chatRouter);
 app.use("/api/provider-health", userAuth, providerHealthHandler);
-app.use("/api/ingest", ingestLimiter, apiKeyAuth, ingestRouter);
+app.use("/api/ingest", ingestLimiter, ingestAuth, ingestRouter);
 app.use("/api/realtime", userAuth, realtimeRouter);
 
-// Request tracking — runs after all routes
-app.use((req, res, next) => {
-  const originalEnd = res.end;
-  res.end = function (...args) {
-    trackRequest(req, res.statusCode, req._timing?.total || 0);
-    originalEnd.apply(res, args);
-  };
-  next();
-});
-
-// Global error handler
-app.use((err, req, res, _next) => {
-  logger.error({ err }, "Unhandled error");
-  res.status(500).json({ error: "Internal server error" });
-});
-
-// Cron: Alert evaluation every 2 minutes
-cron.schedule("*/2 * * * *", () => {
-  evaluateAllAlerts().catch((err) =>
-    logger.error({ err }, "[Cron] Alert evaluation failed"),
-  );
-});
-
-// Cron: Metrics broadcast every 10 seconds
-cron.schedule("*/10 * * * * *", async () => {
-  try {
-    const { data: projects } = await supabase
-      .from("projects")
-      .select("id")
-      .limit(50);
-    if (projects) {
-      for (const project of projects) {
-        const data = await getMetrics({ projectId: project.id });
-        if (data) emitMetricsUpdate(project.id, data);
-      }
-    }
-    const healthRes = await fetch(
-      `http://localhost:${PORT}/api/provider-health`,
-    );
-    if (healthRes.ok) emitProviderHealth(await healthRes.json());
-  } catch (err) {
-    logger.error({ err }, "[Cron] Metrics broadcast error");
-  }
-});
-
-const server = app.listen(PORT, () => {
-  logger.info(
-    { port: PORT, frontendUrl: FRONTEND_URL },
-    "TraceLLM API started",
-  );
-});
-
-startIngestWorker();
-
-// Graceful shutdown
-async function shutdown(signal) {
-  logger.info({ signal }, "Shutdown signal received");
-  server.close(() => {
-    logger.info("HTTP server closed");
-  });
-  await shutdownQueue();
-  logger.info("Shutdown complete");
-  process.exit(0);
-}
-
-process.on("SIGINT", () => shutdown("SIGINT"));
-process.on("SIGTERM", () => shutdown("SIGTERM"));
-process.on("unhandledRejection", (reason) => {
-  logger.error({ err: reason }, "Unhandled promise rejection");
-});
-
-async function providerHealthHandler(_req, res) {
+// Internal routes (bypass userAuth — localhost only)
+async function getProviderHealth() {
   const now = new Date();
   const fiveMinAgo = new Date(now - 5 * 60000).toISOString();
   const providers = ["openai", "anthropic", "groq", "openrouter"];
@@ -293,5 +223,79 @@ async function providerHealthHandler(_req, res) {
     });
   }
 
+  return health;
+}
+
+// Request tracking — runs after all routes
+app.use((req, res, next) => {
+  const originalEnd = res.end;
+  res.end = function (...args) {
+    trackRequest(req, res.statusCode, req._timing?.total || 0);
+    originalEnd.apply(res, args);
+  };
+  next();
+});
+
+// Global error handler
+app.use((err, req, res, _next) => {
+  logger.error({ err }, "Unhandled error");
+  res.status(500).json({ error: "Internal server error" });
+});
+
+// Cron: Alert evaluation every 2 minutes
+cron.schedule("*/2 * * * *", () => {
+  evaluateAllAlerts().catch((err) =>
+    logger.error({ err }, "[Cron] Alert evaluation failed"),
+  );
+});
+
+// Cron: Metrics broadcast every 10 seconds
+cron.schedule("*/10 * * * * *", async () => {
+  try {
+    const { data: projects } = await supabase
+      .from("projects")
+      .select("id")
+      .limit(50);
+    if (projects) {
+      for (const project of projects) {
+        const data = await getMetrics({ projectId: project.id });
+        if (data) emitMetricsUpdate(project.id, data);
+      }
+    }
+    const health = await getProviderHealth();
+    emitProviderHealth(health);
+  } catch (err) {
+    logger.error({ err }, "[Cron] Metrics broadcast error");
+  }
+});
+
+const server = app.listen(PORT, () => {
+  logger.info(
+    { port: PORT, frontendUrl: FRONTEND_URL },
+    "TraceLLM API started",
+  );
+});
+
+startIngestWorker();
+
+// Graceful shutdown
+async function shutdown(signal) {
+  logger.info({ signal }, "Shutdown signal received");
+  server.close(() => {
+    logger.info("HTTP server closed");
+  });
+  await shutdownQueue();
+  logger.info("Shutdown complete");
+  process.exit(0);
+}
+
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("unhandledRejection", (reason) => {
+  logger.error({ err: reason }, "Unhandled promise rejection");
+});
+
+async function providerHealthHandler(_req, res) {
+  const health = await getProviderHealth();
   res.json(health);
 }

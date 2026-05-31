@@ -6,6 +6,14 @@ import { logger } from "../services/logger.js";
 
 const router = Router();
 
+router.use((req, _res, next) => {
+  logger.debug(
+    { path: req.path, baseUrl: req.baseUrl, originalUrl: req.originalUrl },
+    "Alerts router hit",
+  );
+  next();
+});
+
 const createAlertSchema = z.object({
   name: z.string().min(1).max(200),
   alert_type: z.enum([
