@@ -82,6 +82,7 @@ export default function Chat() {
   const [model, setModel] = useState("meta-llama/llama-3.3-70b-instruct:free");
   const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef(null);
+  const assistantContentRef = useRef("");
 
   const active = conversations.find((c) => c.id === activeId);
   const currentProvider = PROVIDERS.find((p) => p.id === provider);
@@ -194,6 +195,7 @@ export default function Chat() {
     const controller = new AbortController();
     setAbortController(controller);
     setStreaming(true);
+    assistantContentRef.current = "";
 
     const assistantMsg = { role: "assistant", content: "" };
     setConversations((prev) =>
@@ -213,6 +215,7 @@ export default function Chat() {
         conversationId: convId,
         signal: controller.signal,
         onToken: (token) => {
+          assistantContentRef.current += token;
           setConversations((prev) =>
             prev.map((c) =>
               c.id === convId
@@ -230,10 +233,8 @@ export default function Chat() {
         },
       });
 
-      const finalConv = conversations.find((c) => c.id === convId);
-      const lastMsg = finalConv?.messages?.[finalConv.messages.length - 1];
-      if (lastMsg?.content) {
-        await persistMessage(convId, "assistant", lastMsg.content);
+      if (assistantContentRef.current) {
+        await persistMessage(convId, "assistant", assistantContentRef.current);
       }
     } catch (err) {
       if (err.name !== "AbortError") {
