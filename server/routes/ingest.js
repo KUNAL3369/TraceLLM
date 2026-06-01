@@ -10,12 +10,26 @@ import { trackTokens } from "../routes/internal.js";
 
 const router = Router();
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isValidUUID(val) {
+  return typeof val === "string" && UUID_RE.test(val);
+}
+
 router.post("/", async (req, res) => {
   const startTime = Date.now();
   try {
+    const projectId = req.body.project_id || req.projectId;
+    if (!projectId || !isValidUUID(projectId)) {
+      return res
+        .status(400)
+        .json({ error: "Invalid project_id: must be a valid UUID" });
+    }
+
     const parsed = ingestSchema.parse({
       ...req.body,
-      project_id: req.body.project_id || req.projectId,
+      project_id: projectId,
     });
 
     const { allowed, reason, plan } = await checkUsageLimit(parsed.project_id);
@@ -25,7 +39,10 @@ router.post("/", async (req, res) => {
 
     const payload = {
       project_id: parsed.project_id,
-      conversation_id: parsed.conversation_id || null,
+      conversation_id:
+        parsed.conversation_id && isValidUUID(parsed.conversation_id)
+          ? parsed.conversation_id
+          : null,
       session_id: parsed.session_id || null,
       provider: parsed.provider,
       model: parsed.model,
@@ -39,12 +56,23 @@ router.post("/", async (req, res) => {
       response_preview: parsed.response_preview,
     };
 
+    logger.info(
+      {
+        project_id: payload.project_id,
+        conversation_id: payload.conversation_id,
+        status: payload.status,
+      },
+      "Ingest request",
+    );
+
     trackTokens(parsed.total_tokens);
 
     const jobId = await enqueueIngest(payload);
 
     if (jobId) {
-      return res.status(202).json({ success: true, queued: true, job_id: jobId });
+      return res
+        .status(202)
+        .json({ success: true, queued: true, job_id: jobId });
     }
 
     req.startDBTimer?.();
@@ -55,14 +83,23 @@ router.post("/", async (req, res) => {
       .single();
     req.endDBTimer?.();
 
-    const finalPayload = project?.pii_redaction_enabled ? redactLogPayload(payload) : payload;
+    const finalPayload = project?.pii_redaction_enabled
+      ? redactLogPayload(payload)
+      : payload;
 
     req.startDBTimer?.();
-    const { data, error } = await supabase.from("inference_logs").insert(finalPayload).select().single();
+    const { data, error } = await supabase
+      .from("inference_logs")
+      .insert(finalPayload)
+      .select()
+      .single();
     req.endDBTimer?.();
 
     if (error) {
-      logger.error({ err: error, projectId: parsed.project_id }, "Ingest DB error");
+      logger.error(
+        { err: error, projectId: parsed.project_id },
+        "Ingest DB error",
+      );
       return res.status(500).json({ error: "Failed to store log" });
     }
 
@@ -72,19 +109,24 @@ router.post("/", async (req, res) => {
     });
 
     const duration = Date.now() - startTime;
-    logger.info({
-      type: "ingest",
-      projectId: parsed.project_id,
-      provider: parsed.provider,
-      status: parsed.status,
-      duration_ms: duration,
-      tokens: parsed.total_tokens,
-    }, "Ingest processed");
+    logger.info(
+      {
+        type: "ingest",
+        projectId: parsed.project_id,
+        provider: parsed.provider,
+        status: parsed.status,
+        duration_ms: duration,
+        tokens: parsed.total_tokens,
+      },
+      "Ingest processed",
+    );
 
     return res.status(201).json({ success: true, id: data.id });
   } catch (err) {
     if (err instanceof z.ZodError) {
-      return res.status(400).json({ error: "Validation failed", details: err.errors });
+      return res
+        .status(400)
+        .json({ error: "Validation failed", details: err.errors });
     }
     logger.error({ err }, "Ingest error");
     return res.status(500).json({ error: "Internal server error" });

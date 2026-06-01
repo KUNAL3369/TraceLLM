@@ -8,10 +8,19 @@ import { trackUsage } from "../services/usageService.js";
 import { logAudit } from "../services/auditService.js";
 import { logger } from "../services/logger.js";
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isValidUUID(val) {
+  return typeof val === "string" && UUID_RE.test(val);
+}
+
 const router = Router();
 
 function getProjectId(req) {
-  return req.body.project_id || req.projectId || "dev";
+  const id = req.body.project_id || req.projectId || null;
+  if (id && !isValidUUID(id)) return null;
+  return id;
 }
 
 async function persistInferenceLog({
@@ -31,9 +40,15 @@ async function persistInferenceLog({
   userId,
 }) {
   try {
+    if (!projectId || !isValidUUID(projectId)) {
+      logger.warn({ projectId }, "Skipping persist — invalid project_id");
+      return null;
+    }
+
     const payload = {
       project_id: projectId,
-      conversation_id: conversationId || null,
+      conversation_id:
+        conversationId && isValidUUID(conversationId) ? conversationId : null,
       session_id: sessionId || null,
       provider,
       model,
@@ -46,6 +61,16 @@ async function persistInferenceLog({
       request_preview: (requestPreview || "").slice(0, 500),
       response_preview: (responsePreview || "").slice(0, 500),
     };
+
+    logger.info(
+      {
+        project_id: projectId,
+        conversation_id: payload.conversation_id,
+        user_id: userId,
+        status,
+      },
+      "Persisting inference log from chat route",
+    );
 
     const { data, error } = await supabase
       .from("inference_logs")

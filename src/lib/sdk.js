@@ -30,10 +30,10 @@ async function getHeaders() {
 
 function getProjectId() {
   try {
-    return useProjectStore.getState().selectedProjectId || "dev";
+    return useProjectStore.getState().selectedProjectId || null;
   } catch {
     console.warn("[SDK] Failed to get project ID from store");
-    return "dev";
+    return null;
   }
 }
 

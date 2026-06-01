@@ -4,6 +4,13 @@ import { logger } from "../services/logger.js";
 
 const router = Router();
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isValidUUID(val) {
+  return typeof val === "string" && UUID_RE.test(val);
+}
+
 router.get("/", async (req, res) => {
   try {
     let query = supabase
@@ -14,6 +21,11 @@ router.get("/", async (req, res) => {
       .order("last_activity_at", { ascending: false });
 
     if (req.query.project_id) {
+      if (!isValidUUID(req.query.project_id)) {
+        return res
+          .status(400)
+          .json({ error: "Invalid project_id: must be a valid UUID" });
+      }
       query = query.eq("project_id", req.query.project_id);
     }
     if (req.query.status) {
@@ -32,6 +44,18 @@ router.get("/", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     const { project_id, session_id, title } = req.body;
+
+    if (!project_id || !isValidUUID(project_id)) {
+      return res
+        .status(400)
+        .json({ error: "Invalid project_id: must be a valid UUID" });
+    }
+
+    logger.info(
+      { project_id, session_id, user_id: req.userId },
+      "Creating conversation",
+    );
+
     const { data, error } = await supabase
       .from("conversations")
       .insert({
@@ -44,6 +68,10 @@ router.post("/", async (req, res) => {
       .single();
 
     if (error) return res.status(500).json({ error: error.message });
+    logger.info(
+      { conversation_id: data.id, project_id },
+      "Conversation created",
+    );
     return res.status(201).json(data);
   } catch (err) {
     logger.error({ err }, "Create conversation error");
@@ -53,6 +81,14 @@ router.post("/", async (req, res) => {
 
 router.get("/:id", async (req, res) => {
   try {
+    if (!isValidUUID(req.params.id)) {
+      return res
+        .status(400)
+        .json({ error: "Invalid conversation_id: must be a valid UUID" });
+    }
+
+    logger.info({ conversation_id: req.params.id }, "Fetching conversation");
+
     const { data: conv, error } = await supabase
       .from("conversations")
       .select("*, messages(*)")
@@ -73,6 +109,18 @@ router.post("/:id/messages", async (req, res) => {
     if (!role || !content) {
       return res.status(400).json({ error: "role and content are required" });
     }
+    if (!isValidUUID(req.params.id)) {
+      return res
+        .status(400)
+        .json({
+          error: "Invalid conversation_id in URL: must be a valid UUID",
+        });
+    }
+
+    logger.info(
+      { conversation_id: req.params.id, role, user_id: req.userId },
+      "Creating message",
+    );
 
     const { data, error } = await supabase
       .from("messages")

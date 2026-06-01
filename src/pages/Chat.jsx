@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { chatCompletion, createSession } from "../lib/sdk";
 import { supabase } from "../lib/supabase";
+import { useProjectStore } from "../stores/projectStore";
 
 const PROVIDERS = [
   {
@@ -83,6 +84,7 @@ export default function Chat() {
   const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef(null);
   const assistantContentRef = useRef("");
+  const selectedProjectId = useProjectStore((s) => s.selectedProjectId);
 
   const active = conversations.find((c) => c.id === activeId);
   const currentProvider = PROVIDERS.find((p) => p.id === provider);
@@ -149,10 +151,17 @@ export default function Chat() {
     let sessionId = active?.sessionId || createSession();
 
     if (!convId || convId === "new") {
+      if (!selectedProjectId) {
+        console.warn("[Chat] No project selected — cannot create conversation");
+        return;
+      }
       try {
         const newConv = await fetchWithAuth("/api/conversations", {
           method: "POST",
-          body: JSON.stringify({ project_id: "dev", session_id: sessionId }),
+          body: JSON.stringify({
+            project_id: selectedProjectId,
+            session_id: sessionId,
+          }),
         });
         convId = newConv.id;
         setActiveId(convId);
@@ -161,15 +170,8 @@ export default function Chat() {
           ...prev,
         ]);
       } catch {
-        console.warn(
-          "[Chat] Failed to create conversation, using local fallback",
-        );
-        convId = `local_${Date.now()}`;
-        setActiveId(convId);
-        setConversations((prev) => [
-          { id: convId, messages: [], sessionId, title: "New Chat (offline)" },
-          ...prev,
-        ]);
+        console.error("[Chat] Failed to create conversation");
+        return;
       }
     }
 
