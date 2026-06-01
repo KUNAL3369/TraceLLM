@@ -42,6 +42,18 @@ export function useApi(endpoint) {
       }
 
       const res = await fetch(url, { headers });
+      if (import.meta.env.DEV) {
+        console.log("[useApi] Response:", {
+          url,
+          status: res.status,
+          ok: res.ok,
+        });
+      }
+      if (res.status === 304) {
+        if (import.meta.env.DEV)
+          console.log("[useApi] 304 — keeping existing data");
+        return;
+      }
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: "Request failed" }));
         throw new Error(err.error || `HTTP ${res.status}`);

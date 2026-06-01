@@ -70,6 +70,19 @@ export default function Dashboard() {
   }, [metrics]);
 
   useEffect(() => {
+    if (connected && !data) {
+      setLoading(false);
+    }
+  }, [connected, data]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 15000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
     if (!connected) return;
     if (selectedProjectId) {
       (async () => {

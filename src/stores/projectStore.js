@@ -38,6 +38,19 @@ export const useProjectStore = create((set, get) => ({
           selectedProjectId: state.selectedProjectId || projects[0]?.id || null,
           loading: false,
         }));
+      } else if (res.status === 304) {
+        const state = get();
+        set({
+          selectedProjectId:
+            state.selectedProjectId || state.projects[0]?.id || null,
+          loading: false,
+        });
+        if (import.meta.env.DEV) {
+          console.log(
+            "[projectStore] 304 — using cached projects, selectedProjectId:",
+            state.selectedProjectId || state.projects[0]?.id,
+          );
+        }
       } else {
         const body = await res.text().catch(() => "");
         console.error(

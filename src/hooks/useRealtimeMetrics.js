@@ -15,12 +15,15 @@ export function useRealtimeMetrics(projectId) {
 
   useEffect(() => {
     projectIdRef.current = projectId;
+    if (!projectId) return;
+
+    let cancelled = false;
 
     const connect = async () => {
       if (sourceRef.current) sourceRef.current.close();
 
       const params = new URLSearchParams();
-      if (projectIdRef.current) params.set("project_id", projectIdRef.current);
+      params.set("project_id", projectIdRef.current);
 
       const {
         data: { session },
@@ -28,15 +31,18 @@ export function useRealtimeMetrics(projectId) {
       if (session?.access_token) params.set("token", session.access_token);
 
       const url = `${API_URL}/api/realtime/metrics/stream?${params}`;
+      if (import.meta.env.DEV) console.log("[SSE] Connecting:", url);
       const source = new EventSource(url);
       sourceRef.current = source;
 
       source.onopen = () => {
+        if (cancelled) return;
         setConnected(true);
         setError(null);
       };
 
       source.onmessage = (event) => {
+        if (cancelled) return;
         try {
           const payload = JSON.parse(event.data);
           switch (payload.type) {
@@ -56,6 +62,7 @@ export function useRealtimeMetrics(projectId) {
       };
 
       source.onerror = () => {
+        if (cancelled) return;
         setConnected(false);
         setError("Connection lost. Reconnecting...");
         source.close();
@@ -65,6 +72,7 @@ export function useRealtimeMetrics(projectId) {
 
     connect();
     return () => {
+      cancelled = true;
       if (sourceRef.current) sourceRef.current.close();
       if (reconnectRef.current) clearTimeout(reconnectRef.current);
     };
