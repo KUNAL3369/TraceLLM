@@ -47,6 +47,10 @@ function isRetryable(status) {
 }
 
 async function fetchWithRetry(url, options, attempt = 0) {
+  if (!url || typeof url !== "string") {
+    console.error("[SDK] fetchWithRetry: invalid url —", url);
+    throw new Error(`Invalid fetch URL: ${url}`);
+  }
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
@@ -64,6 +68,7 @@ async function fetchWithRetry(url, options, attempt = 0) {
       await sleep(RETRY_BACKOFFS[attempt]);
       return fetchWithRetry(url, options, attempt + 1);
     }
+    console.error("[SDK] fetchWithRetry error:", url, err.message);
     throw err;
   }
 }

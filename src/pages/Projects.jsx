@@ -15,9 +15,13 @@ export default function Projects() {
   const createProject = async () => {
     if (!newName.trim() || creating) return;
     setCreating(true);
+    const url = `${API_URL}/api/projects`;
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`${API_URL}/api/projects`, {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (import.meta.env.DEV) console.log("[Projects] POST", url);
+      const res = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -31,6 +35,8 @@ export default function Projects() {
         refetch();
         setNewName("");
         setShowNew(false);
+      } else {
+        console.error("[Projects] create failed:", url, res.status);
       }
     } catch (err) {
       console.error("Create project error:", err);
@@ -40,9 +46,17 @@ export default function Projects() {
   };
 
   const createKey = async (projectId) => {
+    if (!projectId) {
+      console.warn("[Projects] createKey: no projectId");
+      return;
+    }
+    const url = `${API_URL}/api/projects/${projectId}/keys`;
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch(`${API_URL}/api/projects/${projectId}/keys`, {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (import.meta.env.DEV) console.log("[Projects] POST", url);
+      const res = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -54,6 +68,8 @@ export default function Projects() {
         const key = await res.json();
         setNewKey(key.raw_key);
         refetch();
+      } else {
+        console.error("[Projects] createKey failed:", url, res.status);
       }
     } catch (err) {
       console.error("Create key error:", err);
@@ -61,12 +77,25 @@ export default function Projects() {
   };
 
   const revokeKey = async (projectId, keyId) => {
+    if (!projectId || !keyId) {
+      console.warn("[Projects] revokeKey: missing params", {
+        projectId,
+        keyId,
+      });
+      return;
+    }
+    const url = `${API_URL}/api/projects/${projectId}/keys/${keyId}/revoke`;
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      await fetch(`${API_URL}/api/projects/${projectId}/keys/${keyId}/revoke`, {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (import.meta.env.DEV) console.log("[Projects] PATCH", url);
+      const res = await fetch(url, {
         method: "PATCH",
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
+      if (!res.ok)
+        console.error("[Projects] revokeKey failed:", url, res.status);
       refetch();
     } catch (err) {
       console.error("Revoke key error:", err);
@@ -78,10 +107,15 @@ export default function Projects() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Projects</h1>
-          <p className="text-sm text-gray-400">Manage your projects and API keys</p>
+          <p className="text-sm text-gray-400">
+            Manage your projects and API keys
+          </p>
         </div>
         <button
-          onClick={() => { setShowNew(!showNew); setNewKey(null); }}
+          onClick={() => {
+            setShowNew(!showNew);
+            setNewKey(null);
+          }}
           className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
         >
           {showNew ? "Cancel" : "+ New Project"}
@@ -90,8 +124,12 @@ export default function Projects() {
 
       {newKey && (
         <div className="rounded-2xl border border-green-500/30 bg-green-900/20 p-4">
-          <h3 className="text-sm font-medium text-green-400">API Key Created</h3>
-          <p className="mt-1 text-xs text-gray-400">Copy this key now. You won't be able to see it again.</p>
+          <h3 className="text-sm font-medium text-green-400">
+            API Key Created
+          </h3>
+          <p className="mt-1 text-xs text-gray-400">
+            Copy this key now. You won't be able to see it again.
+          </p>
           <div className="mt-2 flex items-center gap-2">
             <code className="flex-1 rounded-lg bg-[#0f172a] px-3 py-2 font-mono text-xs text-green-300">
               {newKey}
@@ -108,7 +146,9 @@ export default function Projects() {
 
       {showNew && (
         <div className="rounded-2xl border border-white/10 bg-[#1e293b] p-4">
-          <h3 className="mb-3 text-sm font-medium text-white">Create Project</h3>
+          <h3 className="mb-3 text-sm font-medium text-white">
+            Create Project
+          </h3>
           <div className="flex gap-2">
             <input
               type="text"
@@ -141,7 +181,10 @@ export default function Projects() {
       {loading && (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-28 animate-pulse rounded-2xl bg-[#1e293b]" />
+            <div
+              key={i}
+              className="h-28 animate-pulse rounded-2xl bg-[#1e293b]"
+            />
           ))}
         </div>
       )}
@@ -149,17 +192,24 @@ export default function Projects() {
       {!loading && projects && (
         <div className="space-y-3">
           {projects.map((project) => (
-            <div key={project.id} className="rounded-2xl border border-white/10 bg-[#1e293b] p-5">
+            <div
+              key={project.id}
+              className="rounded-2xl border border-white/10 bg-[#1e293b] p-5"
+            >
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-base font-medium text-white">{project.name}</h3>
-                  <span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                    project.environment === "production"
-                      ? "bg-green-900/30 text-green-400"
-                      : project.environment === "staging"
-                      ? "bg-amber-900/30 text-amber-400"
-                      : "bg-blue-900/30 text-blue-400"
-                  }`}>
+                  <h3 className="text-base font-medium text-white">
+                    {project.name}
+                  </h3>
+                  <span
+                    className={`mt-1 inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+                      project.environment === "production"
+                        ? "bg-green-900/30 text-green-400"
+                        : project.environment === "staging"
+                          ? "bg-amber-900/30 text-amber-400"
+                          : "bg-blue-900/30 text-blue-400"
+                    }`}
+                  >
                     {project.environment}
                   </span>
                 </div>
@@ -173,13 +223,16 @@ export default function Projects() {
               <div className="mt-3 space-y-2">
                 {project.api_keys?.map((key) => (
                   <div key={key.id} className="flex items-center gap-2">
-                    <code className={`flex-1 rounded-lg px-3 py-2 font-mono text-xs ${
-                      key.status === "active" ? "bg-[#0f172a] text-gray-300" : "bg-[#0f172a] text-gray-600 line-through"
-                    }`}>
+                    <code
+                      className={`flex-1 rounded-lg px-3 py-2 font-mono text-xs ${
+                        key.status === "active"
+                          ? "bg-[#0f172a] text-gray-300"
+                          : "bg-[#0f172a] text-gray-600 line-through"
+                      }`}
+                    >
                       {key.status === "active"
                         ? `tracellm_${key.key_preview || key.id.slice(0, 8)}...`
-                        : `[REVOKED] ${key.id.slice(0, 8)}...`
-                      }
+                        : `[REVOKED] ${key.id.slice(0, 8)}...`}
                     </code>
                     {key.status === "active" && (
                       <button
@@ -192,7 +245,9 @@ export default function Projects() {
                   </div>
                 ))}
                 {(!project.api_keys || project.api_keys.length === 0) && (
-                  <div className="text-xs text-gray-600">No API keys. Create one to start ingesting data.</div>
+                  <div className="text-xs text-gray-600">
+                    No API keys. Create one to start ingesting data.
+                  </div>
                 )}
               </div>
             </div>

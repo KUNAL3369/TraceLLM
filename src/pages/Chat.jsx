@@ -52,12 +52,23 @@ async function getHeaders() {
 }
 
 async function fetchWithAuth(url, options = {}) {
+  if (!url || typeof url !== "string") {
+    throw new Error(`fetchWithAuth: invalid url — ${url}`);
+  }
+  const fullUrl = `${API_URL}${url}`;
+  if (import.meta.env.DEV) {
+    console.log("[Chat] fetchWithAuth:", fullUrl);
+  }
   const headers = await getHeaders();
-  const res = await fetch(`${API_URL}${url}`, {
+  const res = await fetch(fullUrl, {
     ...options,
     headers: { ...headers, ...options.headers },
   });
-  if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    console.error("[Chat] Request failed:", fullUrl, res.status, body);
+    throw new Error(`Request failed: ${res.status}`);
+  }
   return res.json();
 }
 
