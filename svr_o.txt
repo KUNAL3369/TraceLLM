@@ -1,2 +1,0 @@
-{"level":30,"time":1780049995862,"pid":5672,"hostname":"Lenovo_LOQ","msg":"[Queue] Redis not configured — using direct ingestion"}
-{"level":30,"time":1780049996011,"pid":5672,"hostname":"Lenovo_LOQ","port":3001,"frontendUrl":"http://localhost:5173","msg":"TraceLLM API started"}
